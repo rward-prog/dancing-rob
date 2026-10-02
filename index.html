@@ -143,6 +143,11 @@ body.bg-slides #hot{display:block}
       <select id="every"><option value="1">beat</option><option value="2" selected>2 beats</option><option value="4">4 beats</option></select></label>
     <label>Big laugh moments
       <select id="laugh"><option value="5">Often</option><option value="9" selected>Sometimes</option><option value="18">Rarely</option><option value="0">Never</option></select></label>
+    <label class="chk"><input type="checkbox" id="talkOn" checked> The dancer talks when a new song starts</label>
+    <label>Silly genie stories
+      <select id="genieAmt"><option value="0.1" selected>Sometimes (1 in 10)</option><option value="0.25">Often (1 in 4)</option><option value="0">Never</option></select></label>
+    <div class="row"><button class="pill" id="sayNow">Say something now</button></div>
+    <p class="small">To hear the real song name, turn on "Show the song name as text" under Song info.</p>
     <label>Dancer size
       <input id="dSize" type="range" min="0.3" max="1.2" step="0.05" value="1"></label>
     <label>Dancer position
@@ -225,7 +230,7 @@ body.bg-slides #hot{display:block}
   <section class="grp" aria-labelledby="g-comfort">
     <h3 id="g-comfort">Comfort and keys</h3>
     <label class="chk"><input type="checkbox" id="calm"> Calm mode (gentler flashing)</label>
-    <p class="small">Keys: 1 to 5 switch style; D dancer; M laugh now; C celebrate; T fly the title in; F fullscreen; S settings.</p>
+    <p class="small">Keys: 1 to 5 switch style; D dancer; M laugh now; C celebrate; V dancer speaks; T fly the title in; F fullscreen; S settings.</p>
   </section>
 </aside>
 
@@ -599,7 +604,8 @@ function updateMouth(t, dt){
     mouthUntil = t + 0.9 + Math.random() * 0.9;
     mouthNext = mouthUntil + S.laugh * (0.6 + Math.random() * 0.8);
   }
-  const target = t < mouthUntil ? 0.55 + 0.45 * Math.abs(Math.sin(t * Math.PI * bps)) : 0;
+  let target = t < mouthUntil ? 0.55 + 0.45 * Math.abs(Math.sin(t * Math.PI * bps)) : 0;
+  if (speech && S.talk){ const e = t - speech.t0; if (e >= 0 && e < speech.text.length / 32) target = Math.max(target, 0.12 + 0.38 * Math.abs(Math.sin(t * 15))); }
   mouth += (target - mouth) * Math.min(1, dt * 16);
 }
 // where the mouth sits inside the built-in head cutout (as fractions of the image)
@@ -992,6 +998,7 @@ function drawDancer(t, dt){
     ctx.restore();
   }
   ctx.restore();
+  drawBubble(t, x0 + head.x * sc, hipY + head.y * sc, hr * sc * 1.2);
 }
 
 /* ---------- flying title ---------- */
@@ -1213,10 +1220,10 @@ function drawTitle(t){
 S.slides = { url: '', show: true };
 try { Object.assign(S.slides, JSON.parse(localStorage.getItem('soundlab-slides') || '{}')); } catch (_) {}
 const saveSlides = () => { try { localStorage.setItem('soundlab-slides', JSON.stringify(S.slides)); } catch (_) {} };
-S.dSize = 1; S.dPos = 'c';
-try { const d = JSON.parse(localStorage.getItem('soundlab-dancer') || 'null'); if (d){ if (d.size) S.dSize = +d.size; if (d.pos) S.dPos = d.pos; } } catch (_) {}
-const saveDancer = () => { try { localStorage.setItem('soundlab-dancer', JSON.stringify({ size: S.dSize, pos: S.dPos })); } catch (_) {} };
-function syncDancerUI(){ $('#dSize').value = S.dSize; $('#dPos').value = S.dPos; }
+S.dSize = 1; S.dPos = 'c'; S.talk = true; S.genie = 0.1;
+try { const d = JSON.parse(localStorage.getItem('soundlab-dancer') || 'null'); if (d){ if (d.size) S.dSize = +d.size; if (d.pos) S.dPos = d.pos; if (typeof d.talk === 'boolean') S.talk = d.talk; if (d.genie != null) S.genie = +d.genie; } } catch (_) {}
+const saveDancer = () => { try { localStorage.setItem('soundlab-dancer', JSON.stringify({ size: S.dSize, pos: S.dPos, talk: S.talk, genie: S.genie })); } catch (_) {} };
+function syncDancerUI(){ $('#dSize').value = S.dSize; $('#dPos').value = S.dPos; $('#talkOn').checked = S.talk; $('#genieAmt').value = String(S.genie); }
 S.cal = { url: '', show: true, view: '', clean: true, dark: true, vis: 0.75 };
 try { Object.assign(S.cal, JSON.parse(localStorage.getItem('soundlab-cal') || '{}')); } catch (_) {}
 const saveCal = () => { try { localStorage.setItem('soundlab-cal', JSON.stringify(S.cal)); } catch (_) {} };
@@ -1451,9 +1458,12 @@ function celebrate(t){
   pulse = 1; laughNow(t); newPose(); peekPop = t;
   spawnConfetti();
   const cheer = { text: CHEERS[(Math.random() * CHEERS.length) | 0], hold: 1.3 };
-  if (S.peek.ocr && ocr.state === 'ready' && peekVideo && S.peek.rect){
-    readSong().then(song => queueTitle(song ? { text: song.title, sub: song.artist, hold: 2.8, long: true } : cheer));
-  } else queueTitle(cheer);
+  const done = song => {
+    queueTitle(song ? { text: song.title, sub: song.artist, hold: 2.8, long: true } : cheer);
+    if (song) lastSong = song;
+    speak(song);
+  };
+  if (S.peek.ocr && ocr.state === 'ready' && peekVideo && S.peek.rect) readSong().then(done); else done(null);
 }
 let confetti = [];
 function spawnConfetti(){
@@ -1479,6 +1489,99 @@ function drawConfetti(dt){
     else ctx.fillRect(-c.w / 2, -c.h / 2, c.w, c.h * Math.abs(Math.cos(c.age * 6 + c.hue)) + 1);
     ctx.restore();
   }
+}
+
+/* ---------- the dancer talks ---------- */
+let speech = null, lastSong = null;
+const SAY_SONG_ARTIST = [
+  "WOW, it's {title} by {artist}!", "{title}?! By {artist}?! My favorite!", "Oh yes. {title}. I can't wait to dance like this!",
+  "{artist}! Everybody, it's {title}!", "Is that {title}? I LOVE this one!", "Now playing: {title} by {artist}. This is my moment.",
+  "{title} by {artist}. Time to show you my moves!", "Hold on, is this {artist}? I'm so ready for {title}!"
+];
+const SAY_SONG = [
+  "WOW, it's {title}! My favorite!", "{title}?! I can't wait to dance like this!", "Oh yes, {title}! Watch these moves!", "Is that {title}? I LOVE this one!"
+];
+const SAY_ANY = [
+  "WOW, my favorite... I can't wait to dance like this!", "Oh yes, THIS one! Watch me go!", "New song! My feet have a mind of their own!",
+  "I was born to dance to this!", "That beat! I can feel it in my... everything!", "Okay okay okay, I know this one!"
+];
+const SAY_CURSE = [
+  "Honestly? I hate dancing. A genie cursed me. Don't ask.", "I'm only dancing because a genie's curse won't let me stop. Send help.",
+  "Fun fact: I never wanted to dance. Then I met a genie. Long story.", "Smile and wave. I'm dancing against my will. Thanks, genie.",
+  "I hate dancing. A genie made me do this. I'm not even joking."
+];
+const SAY_CURSE_SONG = [
+  "{title}? Great. Now I have to dance again. Thanks a lot, genie.", "{title}... and I'm cursed to dance to it. Thanks, genie."
+];
+const SAY_PSA = [
+  "Pro tip from a dancer: avoid genies. Their wishes have tiny print.", "Rule number one: if a lamp is shiny and free, walk away.",
+  "Kids, if you find a lamp, DO NOT rub it. Look at my feet. Learn from me.", "Science fact: 100% of people who rub magic lamps end up dancing. Avoid genies.",
+  "Never make a wish near a genie. I wished for rhythm. Now I can't stop.", "Genies: great at wishes, terrible at fine print. Stay away!"
+];
+const bags = {};
+function bagPick(key, arr){                  // shuffle-bag: every line plays before any repeats
+  let b = bags[key];
+  if (!b || !b.length){
+    b = bags[key] = arr.slice().sort(() => Math.random() - 0.5);
+    if (b.length > 1 && b[b.length - 1] === bags[key + '#last']) b.unshift(b.pop());    // never the same line twice in a row
+  }
+  return (bags[key + '#last'] = b.pop());
+}
+function pickLine(song){
+  const hasT = !!(song && song.title), hasA = hasT && !!song.artist;
+  const fill = line => line.replace(/\{title\}/g, hasT ? song.title : '').replace(/\{artist\}/g, hasA ? song.artist : '');
+  let kind, line;
+  if (Math.random() < S.genie){
+    if (Math.random() < 0.6){ kind = 'curse'; line = hasT && Math.random() < 0.3 ? bagPick('cs', SAY_CURSE_SONG) : bagPick('c', SAY_CURSE); }
+    else { kind = 'psa'; line = bagPick('p', SAY_PSA); }
+  } else if (hasA){ kind = 'song'; line = bagPick('sa', SAY_SONG_ARTIST); }
+  else if (hasT){ kind = 'song'; line = bagPick('s', SAY_SONG); }
+  else { kind = 'any'; line = bagPick('g', SAY_ANY); }
+  return { text: fill(line), kind };
+}
+function speak(song){
+  if (!S.talk) return;
+  const l = pickLine(song);
+  speech = { text: l.text, kind: l.kind, t0: performance.now() / 1000 };
+}
+function wrapLines(text, maxW){
+  const lines = []; let cur = '';
+  for (const w of text.split(/\s+/)){
+    const tryLine = cur ? cur + ' ' + w : w;
+    if (cur && ctx.measureText(tryLine).width > maxW){ lines.push(cur); cur = w; } else cur = tryLine;
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+// a comic speech bubble beside the dancer's head, typed out letter by letter
+function drawBubble(t, hx, hy, hr){
+  if (!speech || !S.talk) return;
+  const CPS = 32, n = speech.text.length, e = t - speech.t0, total = n / CPS + 3.2 + 0.4;
+  if (e > total){ speech = null; return; }
+  if (e < 0) return;
+  const fsz = clamp(W / 52, 16, 28), maxW = clamp(W * 0.34, 230, 480), lh = fsz * 1.25;
+  ctx.save();
+  ctx.font = `800 ${fsz}px "Trebuchet MS","Segoe UI",sans-serif`;
+  const lines = wrapLines(speech.text, maxW), bw = Math.max(...lines.map(l => ctx.measureText(l).width)) + 38, bh = lines.length * lh + 30;
+  if (speech.right === undefined) speech.right = hx < W / 2;           // pick a side once, so it doesn't flip as the dancer sways
+  const right = speech.right, tipX = hx + (right ? hr * 0.9 : -hr * 0.9), tipY = hy;
+  let bx = right ? hx + hr * 1.5 + 22 : hx - hr * 1.5 - 22 - bw;
+  bx = clamp(bx, 12, W - bw - 12) ;
+  const by = clamp(hy - bh * 0.62, 70, H - bh - 14);
+  const pop = easeOutBack(clamp(e / 0.28)), fade = 1 - clamp((e - (total - 0.4)) / 0.4);
+  ctx.globalAlpha = fade;
+  ctx.translate(tipX, tipY); ctx.scale(0.55 + 0.45 * pop, 0.55 + 0.45 * pop); ctx.translate(-tipX, -tipY);
+  const baseX = right ? bx : bx + bw, baseY = clamp(tipY, by + 22, by + bh - 22);
+  const tail = (dx, dy) => { ctx.beginPath(); ctx.moveTo(baseX + dx, baseY - 13 + dy); ctx.lineTo(baseX + dx, baseY + 13 + dy); ctx.lineTo(tipX + dx, tipY + dy); ctx.closePath(); };
+  rr(bx + 6, by + 6, bw, bh, 18); ctx.fillStyle = speech.kind === 'psa' ? '#ffe14a' : '#ff3d9a'; ctx.fill();          // offset shadow in the poster colours
+  tail(6, 6); ctx.fill();
+  ctx.lineJoin = 'round'; ctx.lineWidth = 8; ctx.strokeStyle = '#07040f';
+  rr(bx, by, bw, bh, 18); ctx.stroke(); tail(0, 0); ctx.stroke();
+  ctx.fillStyle = '#fdf3e3'; rr(bx, by, bw, bh, 18); ctx.fill(); tail(0, 0); ctx.fill();
+  ctx.fillStyle = '#07040f'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  let left = Math.floor(e * CPS);
+  lines.forEach((l, i) => { if (left <= 0) return; ctx.fillText(l.slice(0, left), bx + 19, by + 15 + i * lh); left -= l.length + 1; });
+  ctx.restore();
 }
 
 /* ---------- main loop ---------- */
@@ -1581,6 +1684,9 @@ $('#slideUrl').addEventListener('paste', () => setTimeout(() => { S.slides.url =
 $('#slideShow').onchange = e => { S.slides.show = e.target.checked; slideChange(); };
 $('#dSize').oninput = e => { S.dSize = +e.target.value; saveDancer(); };
 $('#dPos').onchange = e => { S.dPos = e.target.value; saveDancer(); };
+$('#talkOn').onchange = e => { S.talk = e.target.checked; if (!S.talk) speech = null; saveDancer(); };
+$('#genieAmt').onchange = e => { S.genie = +e.target.value; saveDancer(); };
+$('#sayNow').onclick = () => speak(lastSong);
 $('#bQuiet').onclick = () => { quiet = true; startEl.hidden = true; $('#bStop').hidden = false; wake(); };
 $('#hot').addEventListener('mousemove', wake);
 $('#hud').addEventListener('click', () => { if (slidesActive) setTimeout(() => $('#cal').focus(), 50); });   // give the arrow keys back to the slides
@@ -1647,6 +1753,7 @@ addEventListener('keydown', e => {
   else if (k === 's') toggleDrawer();
   else if (k === 'm') laughNow(performance.now() / 1000);
   else if (k === 'c') celebrate(performance.now() / 1000);
+  else if (k === 'v') speak(lastSong);
   else if (k === 't') startTitle(performance.now() / 1000);
   wake();
 });
