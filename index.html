@@ -63,9 +63,42 @@ input[type=file]{display:none}
 .txt{display:block;width:100%;margin-top:4px;padding:9px 12px;border-radius:10px;border:2px solid var(--cream);
   background:var(--ink);color:var(--cream)}
 .txt::placeholder{color:rgba(253,243,227,.5)}
+#timer{position:fixed;left:0;top:0;font-size:var(--tsz,30px);padding:.45em .7em .55em;border:.09em solid var(--cream);border-radius:.55em;
+  background:rgba(9,5,20,.9);color:var(--cream);text-align:center;cursor:grab;touch-action:none;user-select:none;min-width:5.4em;
+  box-shadow:.18em .18em 0 var(--pink),.36em .36em 0 var(--cyan);font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif}
+#timer[hidden]{display:none}
+#timer.drag{cursor:grabbing}
+#timer:focus-visible{outline:3px solid var(--cyan);outline-offset:4px}
+#tmDigits{font-family:"Arial Black","Impact",sans-serif;font-size:2.6em;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:.01em;color:var(--cyan)}
+#tmBar{height:.26em;margin:.45em .1em .55em;border-radius:1em;background:rgba(253,243,227,.22);overflow:hidden}
+#tmFill{height:100%;width:100%;background:var(--cyan)}
+#timer .tmBtns{display:flex;gap:.3em;justify-content:center;transition:opacity .3s}
+#timer .tmBtns button{font:inherit;font-size:.52em;font-weight:700;cursor:pointer;border:.15em solid var(--cream);border-radius:999px;padding:.3em .85em;background:transparent;color:var(--cream)}
+#timer .tmBtns #tmGo{background:var(--sun);border-color:var(--sun);color:var(--ink);min-width:4.4em}
+#timer.run:not(:hover):not(:focus-within) .tmBtns{opacity:0;pointer-events:none}
+#tmGrip{position:absolute;right:-.2em;bottom:-.2em;width:.8em;height:.8em;cursor:nwse-resize;opacity:0;transition:opacity .25s;
+  background:linear-gradient(135deg,transparent 52%,var(--cream) 52%);border-bottom-right-radius:.45em}
+#timer:hover #tmGrip,#timer.drag #tmGrip{opacity:.95}
+#timer[data-s="half"] #tmDigits{color:var(--sun)}
+#timer[data-s="half"] #tmFill{background:var(--sun)}
+#timer[data-s="warn"] #tmDigits{color:#ff8a3d}
+#timer[data-s="warn"] #tmFill{background:#ff8a3d}
+#timer[data-s="urgent"] #tmDigits{color:var(--pink);animation:tmPulse .5s ease-in-out infinite alternate}
+#timer[data-s="urgent"] #tmFill{background:var(--pink)}
+#timer[data-s="done"] #tmFill{background:var(--pink)}
+#timer.pop{animation:tmPop .6s ease}
+@keyframes tmPop{40%{transform:scale(1.08)}}
+body.calm #timer.pop{animation:none}
+#timer[data-s="done"]{border-color:var(--sun)}
+#timer[data-s="done"] #tmDigits{color:var(--pink);animation:tmBlink .7s steps(2,start) infinite}
+@keyframes tmPulse{to{transform:scale(1.06)}}
+@keyframes tmBlink{50%{opacity:.25}}
+body.calm #tmDigits{animation:none !important}
+@media (prefers-reduced-motion:reduce){#tmDigits{animation:none !important}}
 .pill:disabled{opacity:.4;cursor:default}
 @media (max-width:1420px){ #hud{gap:6px} .group{gap:4px} .pill{padding:5px 10px;font-size:.8rem;border-width:1.5px} }
-@media (max-width:1100px){ .pill{padding:4px 7px;font-size:.72rem} }
+@media (max-width:1100px){ #hud{gap:4px} .group{gap:3px} .pill{padding:4px 6px;font-size:.68rem;border-width:1.5px} }
+@media (max-width:880px){ .pill{padding:3px 5px;font-size:.62rem} }
 #cal{position:fixed;inset:0;width:100%;height:100%;border:0;background:#fff;pointer-events:none}
 body.cal-on #c{mix-blend-mode:screen}
 #jump{position:sticky;top:-16px;z-index:2;display:flex;flex-wrap:wrap;gap:5px;margin:0 -16px 16px;padding:8px 16px 10px;
@@ -96,6 +129,18 @@ body.bg-slides #hot{display:block}
 
 <div id="hot"></div>
 
+<div id="timer" hidden tabindex="0" role="timer" aria-label="Lab timer">
+  <div id="tmDigits">10:00</div>
+  <div id="tmBar"><div id="tmFill"></div></div>
+  <div class="tmBtns">
+    <button type="button" id="tmGo">Start</button>
+    <button type="button" id="tmReset">Reset</button>
+    <button type="button" id="tmMinus" aria-label="Take one minute off">&minus;1</button>
+    <button type="button" id="tmPlus" aria-label="Add one minute">+1</button>
+  </div>
+  <div id="tmGrip" title="Drag to resize"></div>
+</div>
+
 <header id="hud">
   <div class="group" role="group" aria-label="Visual style">
     <button class="pill on" data-mode="0">Kaleidoscope</button>
@@ -108,6 +153,7 @@ body.bg-slides #hot{display:block}
     <span class="dot" id="dot" title="Lights up on each detected beat"></span>
     <button class="pill" id="bFreeze" aria-pressed="false" hidden>Freeze</button>
     <button class="pill" id="bPeek" hidden>Song area</button>
+    <button class="pill" id="bTimer" aria-pressed="false">Timer</button>
     <button class="pill" id="bDancer" aria-pressed="true">Dancer</button>
     <button class="pill" id="bAuto" aria-pressed="false">Auto-switch</button>
     <button class="pill" id="bSet" aria-pressed="false">Settings</button>
@@ -122,7 +168,8 @@ body.bg-slides #hot{display:block}
     <button type="button" data-jump="g-music">Music</button>
     <button type="button" data-jump="g-dancer">Dancer</button>
     <button type="button" data-jump="g-title">Title</button>
-    <button type="button" data-jump="g-song">Song info</button>
+    <button type="button" data-jump="g-song">Song</button>
+    <button type="button" data-jump="g-timer">Timer</button>
     <button type="button" data-jump="g-slides">Slides</button>
     <button type="button" data-jump="g-cal">Calendar</button>
     <button type="button" data-jump="g-sci">Science</button>
@@ -195,6 +242,23 @@ body.bg-slides #hot{display:block}
     <p class="small">Works when you start with Share tab audio. For the best results, draw the song area tightly around just the title and artist, not the progress bar.</p>
   </section>
 
+  <section class="grp" aria-labelledby="g-timer">
+    <h3 id="g-timer">Lab timer</h3>
+    <label class="chk"><input type="checkbox" id="tmShow"> Show the lab timer</label>
+    <label>Minutes
+      <input id="tmMin" class="txt" type="number" min="1" max="180" step="1" value="10"></label>
+    <div class="row" id="tmPresets">
+      <button class="pill" data-min="1">1</button><button class="pill" data-min="2">2</button><button class="pill" data-min="5">5</button>
+      <button class="pill" data-min="10">10</button><button class="pill" data-min="15">15</button><button class="pill" data-min="20">20</button><button class="pill" data-min="30">30</button>
+    </div>
+    <label class="chk"><input type="checkbox" id="tmChime" checked> Play a chime at zero</label>
+    <label class="chk"><input type="checkbox" id="tmChime1" checked> Play a chime when 1 minute is left</label>
+    <label class="chk"><input type="checkbox" id="tmRobot" checked> Robot voice says "one minute remaining"</label>
+    <p class="small">The 1 minute chime and robot voice only happen for timers longer than a minute. The timer changes color at the halfway point, in the last minute (for timers over 2 minutes), and in the last 10 seconds.</p>
+    <div class="row"><button class="pill" id="tmTest">Test the finish surprise</button><button class="pill" id="tmTest1">Test the 1 minute alert</button><button class="pill" id="tmHome">Reset position and size</button></div>
+    <p class="small">Drag the timer to move it. Drag its bottom-right corner, or use the mouse wheel over it, to change its size. When it reaches zero, a random surprise plays, and you'll see all ten before any repeats.</p>
+  </section>
+
   <section class="grp" aria-labelledby="g-slides">
     <h3 id="g-slides">Slideshow</h3>
     <label>Google Slides link or embed code
@@ -230,7 +294,7 @@ body.bg-slides #hot{display:block}
   <section class="grp" aria-labelledby="g-comfort">
     <h3 id="g-comfort">Comfort and keys</h3>
     <label class="chk"><input type="checkbox" id="calm"> Calm mode (gentler flashing)</label>
-    <p class="small">Keys: 1 to 5 switch style; D dancer; M laugh now; C celebrate; V dancer speaks; T fly the title in; F fullscreen; S settings.</p>
+    <p class="small">Keys: 1 to 5 switch style; D dancer; M laugh now; C celebrate; V dancer speaks; L lab timer; T fly the title in; F fullscreen; S settings.</p>
   </section>
 </aside>
 
@@ -1584,6 +1648,411 @@ function drawBubble(t, hx, hy, hr){
   ctx.restore();
 }
 
+/* ---------- lab timer: the ten finish surprises ---------- */
+const R = (a, b) => a + Math.random() * (b - a);
+let fx = null, tmUp = null;
+function fxStar(x, y, s, color, alpha){
+  ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = color; ctx.beginPath();
+  for (let i = 0; i < 8; i++){ const a = i * Math.PI / 4, r = i % 2 ? s * 0.28 : s; ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); }
+  ctx.closePath(); ctx.fill(); ctx.restore();
+}
+function fxBolt(x0, y1){
+  const pts = [[x0, 0]]; let x = x0;
+  for (let i = 1; i <= 12; i++){ x += R(-70, 70) * (H / 800); pts.push([x, y1 * i / 12]); }
+  return pts;
+}
+const EMO_SCI = ['\u{1F9EA}', '\u{1F52C}', '\u2697\uFE0F', '\u{1F9EB}', '\u{1F9EC}', '\u{1F97D}', '\u{1F321}\uFE0F', '\u{1F52D}', '\u{1F9F2}', '\u{1F4A1}'];
+const FXS = {
+  confetti: { dur: 3.8, init: () => ({ n: 0 }),
+    draw(f, e){
+      const shots = [0, 0.7, 1.4];
+      while (f.d.n < shots.length && e >= shots[f.d.n]){ spawnConfetti(); f.d.n++; }
+      if (e < 2.4) for (let i = 0; i < (S.calm ? 1 : 4); i++)
+        confetti.push({ x: R(0, W), y: -10, vx: R(-70, 70), vy: R(60, 220), rot: R(0, TAU), vr: R(-9, 9), w: R(6, 15), h: R(4, 10), hue: R(0, 360), age: 0, life: R(2.6, 4.2), star: Math.random() < 0.15 });
+    } },
+
+  explosion: { dur: 3.4,
+    init(){
+      const d = { sparks: [], puffs: [] }, k = H / 800;
+      for (let i = 0; i < (S.calm ? 70 : 190); i++){ const a = R(0, TAU), s = R(150, 1000) * k; d.sparks.push({ x: W / 2, y: H / 2, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: R(0.7, 1.7), age: 0, hue: R(15, 55), sz: R(2, 5) }); }
+      for (let i = 0; i < 14; i++) d.puffs.push({ x: W / 2 + R(-50, 50), y: H / 2 + R(-30, 30), vx: R(-120, 120), vy: R(-170, -20), r: R(40, 95) * k, life: R(1.8, 3), delay: R(0.2, 0.7) });
+      return d;
+    },
+    draw(f, e, dt){
+      const cx = W / 2, cy = H / 2, Rm = Math.min(W, H) * 0.5;
+      if (e < 0.18){ ctx.fillStyle = `rgba(255,255,240,${(1 - e / 0.18) * (S.calm ? 0.2 : 0.75)})`; ctx.fillRect(0, 0, W, H); }
+      if (e < 1.3){
+        const k = 1 - Math.pow(1 - clamp(e / 0.45), 3), r = Rm * (0.25 + 0.75 * k), a = 1 - clamp((e - 0.3) / 1.0);
+        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+        g.addColorStop(0, `rgba(255,255,230,${a})`); g.addColorStop(0.3, `rgba(255,200,60,${a * 0.9})`); g.addColorStop(0.65, `rgba(255,90,20,${a * 0.7})`); g.addColorStop(1, 'rgba(120,20,0,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+      }
+      if (e < 1.1){ const k = clamp(e / 1.1), r = Math.max(W, H) * 0.75 * (1 - Math.pow(1 - k, 2)); ctx.strokeStyle = `rgba(255,240,200,${0.8 * (1 - k)})`; ctx.lineWidth = 3 + 26 * (1 - k); ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.stroke(); }
+      for (const p of f.d.puffs){                                         // dark smoke after the blast
+        const age = e - p.delay; if (age < 0 || age > p.life) continue;
+        const k = age / p.life, r = p.r * (1 + k * 1.6), x = p.x + p.vx * age, y = p.y + p.vy * age, a = 0.55 * Math.sin(Math.PI * Math.min(1, k * 1.15));
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, `rgba(70,64,64,${a})`); g.addColorStop(1, 'rgba(40,36,36,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+      }
+      ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
+      for (const p of f.d.sparks){
+        p.age += dt; if (p.age > p.life) continue;
+        p.vy += 520 * dt; const dr = Math.exp(-dt * 1.5); p.vx *= dr; p.vy *= dr; p.x += p.vx * dt; p.y += p.vy * dt;
+        ctx.strokeStyle = `hsla(${p.hue},100%,${60 - 25 * p.age / p.life}%,${1 - p.age / p.life})`; ctx.lineWidth = p.sz;
+        ctx.beginPath(); ctx.moveTo(p.x - p.vx * 0.03, p.y - p.vy * 0.03); ctx.lineTo(p.x, p.y); ctx.stroke();
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    } },
+
+  smoke: { dur: 4.4,                                                      // a magician's "poof"
+    init(){
+      const d = { puffs: [], stars: [] }, k = H / 800;
+      for (let i = 0; i < 34; i++) d.puffs.push({ x: W / 2 + R(-100, 100), y: H / 2 + R(-60, 60), vx: R(-70, 70), vy: R(-95, -15), r0: R(30, 70) * k, grow: R(45, 95) * k, life: R(2.4, 3.8), delay: R(0, 0.35), g: R(205, 245) });
+      for (let i = 0; i < 14; i++) d.stars.push({ x: W / 2 + R(-200, 200), y: H / 2 + R(-140, 140), s: R(8, 22) * k, t0: R(0.1, 1.2), hue: R(40, 70) });
+      return d;
+    },
+    draw(f, e){
+      for (const p of f.d.puffs){
+        const age = e - p.delay; if (age < 0 || age > p.life) continue;
+        const k = age / p.life, r = p.r0 + p.grow * age, x = p.x + p.vx * age * (1 - 0.4 * k), y = p.y + p.vy * age;
+        const a = 0.8 * Math.pow(1 - k, 1.3) * Math.min(1, age / 0.15);
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, `rgba(${p.g},${p.g},${p.g + 8},${a})`); g.addColorStop(1, `rgba(${p.g},${p.g},${p.g + 8},0)`);
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+      }
+      for (const s of f.d.stars){ const a = e - s.t0; if (a > 0 && a < 1) fxStar(s.x, s.y, s.s * (1 + a), `hsl(${s.hue},100%,75%)`, Math.sin(Math.PI * a)); }
+    } },
+
+  fireworks: { dur: 4.6,
+    init: () => ({ parts: [], bursts: [0, 0.4, 0.85, 1.3, 1.8, 2.3].map(t => ({ t, x: R(0.15, 0.85) * W, y: R(0.12, 0.55) * H, hue: R(0, 360), done: false })) }),
+    draw(f, e, dt){
+      const k = H / 800;
+      for (const b of f.d.bursts) if (!b.done && e >= b.t){
+        b.done = true;
+        for (let i = 0; i < (S.calm ? 70 : 170); i++){ const a = R(0, TAU), s = (Math.random() < 0.5 ? R(380, 600) : R(140, 380)) * k; f.d.parts.push({ x: b.x, y: b.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, hue: b.hue + R(-25, 25), age: 0, life: R(1.2, 2.0) }); }
+      }
+      ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
+      for (let i = f.d.parts.length - 1; i >= 0; i--){
+        const p = f.d.parts[i]; p.age += dt; if (p.age > p.life){ f.d.parts.splice(i, 1); continue; }
+        p.vy += 260 * dt; p.vx *= Math.exp(-dt * 1.1); p.vy *= Math.exp(-dt * 0.6); p.x += p.vx * dt; p.y += p.vy * dt;
+        ctx.strokeStyle = `hsla(${p.hue},100%,68%,${1 - p.age / p.life})`; ctx.lineWidth = 4.5 * (1 - 0.5 * p.age / p.life);
+        ctx.beginPath(); ctx.moveTo(p.x - p.vx * 0.05, p.y - p.vy * 0.05); ctx.lineTo(p.x, p.y); ctx.stroke();
+      }
+      for (const b of f.d.bursts){ const a = e - b.t; if (a > 0 && a < 0.15){ ctx.fillStyle = `hsla(${b.hue},100%,80%,${0.7 * (1 - a / 0.15)})`; ctx.beginPath(); ctx.arc(b.x, b.y, 90 * k, 0, TAU); ctx.fill(); } }
+      ctx.globalCompositeOperation = 'source-over';
+    } },
+
+  balloons: { dur: 6.8,
+    init(){
+      const k = H / 800, list = [];
+      for (let i = 0; i < 20; i++) list.push({ x: R(0.06, 0.94) * W, y: H + 70 + R(0, H * 0.5), r: R(28, 52) * k, vy: R(200, 340) * k, ph: R(0, TAU), hue: R(0, 360) });
+      return { list };
+    },
+    draw(f, e, dt){
+      for (const b of f.d.list){
+        b.y -= b.vy * dt; const x = b.x + Math.sin(e * 1.3 + b.ph) * 40, sw = Math.sin(e * 2 + b.ph) * 14;
+        if (b.y < -b.r * 4) continue;
+        ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x, b.y + b.r * 1.25); ctx.quadraticCurveTo(x + sw, b.y + b.r * 2.2, x - sw * 0.5, b.y + b.r * 3.4); ctx.stroke();
+        const g = ctx.createRadialGradient(x - b.r * 0.3, b.y - b.r * 0.35, b.r * 0.1, x, b.y, b.r * 1.3);
+        g.addColorStop(0, `hsl(${b.hue},100%,75%)`); g.addColorStop(1, `hsl(${b.hue},85%,42%)`);
+        ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, b.y, b.r, b.r * 1.25, 0, 0, TAU); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(x - 6, b.y + b.r * 1.32); ctx.lineTo(x + 6, b.y + b.r * 1.32); ctx.lineTo(x, b.y + b.r * 1.15); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.beginPath(); ctx.ellipse(x - b.r * 0.35, b.y - b.r * 0.5, b.r * 0.16, b.r * 0.3, -0.5, 0, TAU); ctx.fill();
+      }
+    } },
+
+  meteors: { dur: 4.2,
+    init(){
+      const list = [], k = W / 1280;
+      for (let i = 0; i < 28; i++) list.push({ t0: R(0, 2.2), x: R(0.2, 1.15) * W, y: R(-0.2, 0.35) * H, sp: R(1100, 2000) * k, len: R(160, 380) * k, hue: R(190, 60) });
+      return { list };
+    },
+    draw(f, e){
+      const dx = -0.8, dy = 0.6; ctx.lineCap = 'round'; ctx.globalCompositeOperation = 'lighter';
+      for (const m of f.d.list){
+        const a = e - m.t0; if (a < 0 || a > 1.5) continue;
+        const hx = m.x + dx * m.sp * a, hy = m.y + dy * m.sp * a, tx = hx - dx * m.len, ty = hy - dy * m.len;
+        const g = ctx.createLinearGradient(tx, ty, hx, hy); g.addColorStop(0, `hsla(${m.hue},100%,70%,0)`); g.addColorStop(1, `hsla(${m.hue},100%,92%,1)`);
+        ctx.strokeStyle = g; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(hx, hy); ctx.stroke();
+        ctx.fillStyle = `hsla(${m.hue},100%,90%,.9)`; ctx.beginPath(); ctx.arc(hx, hy, 5, 0, TAU); ctx.fill();
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    } },
+
+  bubbles: { dur: 6,
+    init(){
+      const k = H / 800, list = [];
+      for (let i = 0; i < 80; i++){ const pops = Math.random() < 0.4; list.push({ x: R(0, W), y: H + R(20, H * 0.8), r: R(10, 48) * k, vy: R(70, 200) * k, ph: R(0, TAU), popY: pops ? R(0.1, 0.85) * H : -1e9, pop: -1 }); }
+      return { list };
+    },
+    draw(f, e, dt){
+      for (const b of f.d.list){
+        if (b.pop >= 0){ b.pop += dt; if (b.pop < 0.25){ const k = b.pop / 0.25; ctx.strokeStyle = `rgba(255,255,255,${0.7 * (1 - k)})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(b.x, b.y, b.r * (1 + k * 0.9), 0, TAU); ctx.stroke(); } continue; }
+        b.y -= b.vy * dt; const x = b.x + Math.sin(e * 2 + b.ph) * 18;
+        if (b.y < b.popY){ b.pop = 0; b.x = x; continue; }
+        if (b.y < -b.r) continue;
+        const g = ctx.createRadialGradient(x - b.r * 0.3, b.y - b.r * 0.3, b.r * 0.1, x, b.y, b.r);
+        g.addColorStop(0, 'rgba(210,240,255,.18)'); g.addColorStop(1, 'rgba(120,190,255,.32)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, b.y, b.r, 0, TAU); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, b.y, b.r * 0.72, Math.PI * 1.1, Math.PI * 1.45); ctx.stroke();
+      }
+    } },
+
+  lightning: { dur: 2.8,                                                  // skipped in Calm mode (it flashes)
+    init(){
+      const mk = () => { const x0 = R(0.25, 0.75) * W, y1 = H * R(0.55, 0.9), main = fxBolt(x0, y1), bi = 4 + ((Math.random() * 4) | 0), b = main[bi];
+        const branch = [b]; let bx = b[0], by = b[1]; for (let i = 0; i < 5; i++){ bx += R(20, 70) * (Math.random() < 0.5 ? -1 : 1) * (H / 800); by += R(30, 70) * (H / 800); branch.push([bx, by]); } return { main, branch }; };
+      return { bolts: [0, 0.35, 0.8].map(t => Object.assign({ t }, mk())) };
+    },
+    draw(f, e){
+      ctx.fillStyle = `rgba(8,10,28,${0.4 * (1 - clamp((e - 1.5) / 1.0))})`; ctx.fillRect(0, 0, W, H);
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      for (const b of f.d.bolts){
+        const a = e - b.t; if (a < 0 || a > 0.4) continue;
+        if (a < 0.12){ ctx.fillStyle = `rgba(220,230,255,${0.5 * (1 - a / 0.12)})`; ctx.fillRect(0, 0, W, H); }
+        const al = 1 - a / 0.4; ctx.shadowColor = '#8fb4ff'; ctx.shadowBlur = 40;
+        for (const [pts, lw] of [[b.main, 9], [b.branch, 5]]){
+          ctx.strokeStyle = `rgba(240,245,255,${al})`; ctx.lineWidth = lw; ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke();
+        }
+        ctx.shadowBlur = 0;
+      }
+    } },
+
+  sciencerain: { dur: 6.2,
+    init(){
+      const k = clamp(H / 800, 0.6, 1.4), list = [];
+      for (let i = 0; i < 48; i++) list.push({ x: R(0, W), y: -R(40, H * 0.9), vy: R(220, 520) * k, rot: R(0, TAU), vr: R(-3, 3), sz: R(30, 66) * k, ch: EMO_SCI[(Math.random() * EMO_SCI.length) | 0] });
+      return { list };
+    },
+    draw(f, e, dt){
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (const p of f.d.list){
+        p.y += p.vy * dt; p.rot += p.vr * dt; if (p.y > H + p.sz) continue;
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.font = `${p.sz}px ${EMOJI_FONT}`; ctx.fillStyle = '#fff'; ctx.fillText(p.ch, 0, 0); ctx.restore();
+      }
+    } },
+
+  rocket: { dur: 4.8,
+    init: () => ({ x: W * R(0.3, 0.7), parts: [], burst: false }),
+    draw(f, e, dt){
+      const d = f.d, k = H / 800, apexT = 1.9, apexY = H * 0.14, y = H + 70 - (H + 70 - apexY) * Math.pow(Math.min(e, apexT) / apexT, 2);
+      if (e < apexT){
+        const rx = d.x + Math.sin(e * 28) * 2;
+        for (let i = 0; i < 5; i++) d.parts.push({ x: rx + R(-8, 8), y: y + 38 * k, vx: R(-70, 70), vy: R(140, 340), age: 0, life: R(0.4, 1.0), hue: R(10, 55), smoke: Math.random() < 0.35 });
+        ctx.save(); ctx.translate(rx, y); ctx.rotate(-Math.PI / 4); ctx.font = `${96 * k}px ${EMOJI_FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.fillText('\u{1F680}', 0, 0); ctx.restore();
+      } else if (!d.burst){
+        d.burst = true;
+        for (let i = 0; i < (S.calm ? 90 : 200); i++){ const a = R(0, TAU), s = R(100, 640) * k; d.parts.push({ x: d.x, y: apexY, vx: Math.cos(a) * s, vy: Math.sin(a) * s, age: 0, life: R(1.1, 2.1), hue: R(0, 360), star: true }); }
+      }
+      ctx.globalCompositeOperation = 'lighter';
+      for (let i = d.parts.length - 1; i >= 0; i--){
+        const p = d.parts[i]; p.age += dt; if (p.age > p.life){ d.parts.splice(i, 1); continue; }
+        p.x += p.vx * dt; p.y += p.vy * dt; if (p.star){ p.vy += 200 * dt; p.vx *= Math.exp(-dt); p.vy *= Math.exp(-dt * 0.5); }
+        const a = 1 - p.age / p.life;
+        if (p.star){ fxStar(p.x, p.y, 9 + 11 * a, `hsl(${p.hue},100%,70%)`, a); }
+        else if (p.smoke){ ctx.fillStyle = `rgba(210,210,215,${0.3 * a})`; ctx.beginPath(); ctx.arc(p.x, p.y, 10 + 22 * (1 - a), 0, TAU); ctx.fill(); }
+        else { ctx.fillStyle = `hsla(${p.hue},100%,60%,${0.9 * a})`; ctx.beginPath(); ctx.arc(p.x, p.y, 4 + 10 * a, 0, TAU); ctx.fill(); }
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    } }
+};
+const FXNAMES = Object.keys(FXS);
+function pickFx(){ const pool = S.calm ? FXNAMES.filter(n => n !== 'lightning') : FXNAMES; return bagPick('fx' + (S.calm ? 'c' : ''), pool); }
+function startFx(name, t){ fx = { name, t0: t, dur: FXS[name].dur, d: FXS[name].init() }; }
+function drawFx(t, dt){
+  if (!fx) return;
+  const e = t - fx.t0; if (e > fx.dur){ fx = null; return; }
+  ctx.save(); FXS[fx.name].draw(fx, e, dt); ctx.restore();
+}
+// big poster-style "TIME'S UP!" on top of the surprise
+function drawTimesUp(t){
+  if (!tmUp) return;
+  const e = t - tmUp.t0; if (e > 5){ tmUp = null; return; }
+  const px = clamp(Math.min(W * 0.11, H * 0.2), 46, 230), pop = easeOutBack(clamp(e / 0.4)), a = 1 - clamp((e - 4.3) / 0.7);
+  ctx.save(); ctx.globalAlpha = a; ctx.translate(W / 2, H * 0.3); ctx.rotate(Math.sin(e * 7) * 0.025); ctx.scale(pop, pop);
+  ctx.font = `900 ${px}px "Arial Black","Impact",sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  const o = px * 0.05, txt = "TIME'S UP!";
+  ctx.lineWidth = px * 0.16; ctx.strokeStyle = '#07040f';
+  ctx.fillStyle = '#2be3ff'; ctx.strokeText(txt, o * 2, o * 2); ctx.fillText(txt, o * 2, o * 2);
+  ctx.fillStyle = '#ff3d9a'; ctx.strokeText(txt, o, o); ctx.fillText(txt, o, o);
+  ctx.lineWidth = px * 0.07; ctx.fillStyle = '#fdf3e3'; ctx.strokeText(txt, 0, 0); ctx.fillText(txt, 0, 0);
+  ctx.restore();
+}
+
+/* ---------- lab timer: the countdown ---------- */
+S.timer = { show: false, minutes: 10, x: 0.96, y: 0.14, size: 30, chime: true, chime1: true, robot: true };
+try { Object.assign(S.timer, JSON.parse(localStorage.getItem('soundlab-timer') || '{}')); } catch (_) {}
+const saveTimer = () => { try { localStorage.setItem('soundlab-timer', JSON.stringify(S.timer)); } catch (_) {} };
+const tm = { total: S.timer.minutes * 60, left: S.timer.minutes * 60, running: false, endAt: 0, done: false, shown: '', warned: false, st: '' };
+const tmEl = $('#timer'), TIMER_SAYS = ["Time's up, scientists! Great work!", 'Pencils down, goggles up, eyes on me!', "That's time! Clean up, lab crew!", 'Ding ding! Time is up!', 'Time! Hands off the beakers and look up here!'];
+let tmAudio = null;
+// "One minute remaining" in a robot voice (made with the Flite speech synthesizer, then a light ring-modulator effect)
+const ROBOT_MP3 = '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CEqsaAipVFVWAbkoECStHpZoh2uAvimK8Lc23mn1oX5aa+rsv1LMKe9dt8vbn0Yo8waIg0GweS7I83HMCpJJ4oaGZDg0LlH2RI9JLh6nap7/82LESB/K1qhXWEADuppCgbA2BsbTN387N3d3vd/CvTWMEFx33pX19z1/f277xcLDdpMbTKS0QasChNGzwTjEP3o/syowp8+AMGhTGsDDjAQpPOJM+qMEWXWaAnTtVHgqzWnQ7wEJE4EuSWXzE1YK4FrKDpEqiiiNI5CETjp9TpJPNh2iagtAy3c1W7KWXTUSoQcTQmGyKzQunS4r//NgxFgfijaQAZpoADEumqLNatBM+icOeu1/1OozV/1pOkn/5kbGSQt10CokkuhZn9AK1RGTEUNoQqEwoWSeJozLkTmdTsvi9FFI5I6TCVRa7YnrNSYmDrIy7w85W3NPmZ9bossFG0lfuZ37raDEkky0Y3drJ7Y+v457ty1Tuy++2t8dfn3b/UPrazMi+s3hnZn/KU62z6vdz39m//NixGgdKqZUIdkwAS5Kr0cFOYDVDXIKqeoMAVwFEX2WfJjI9LMVDH5M/sPU87nQ0EerzFBq/2zYrYt4w50DrT3TTk2peuy4bI1z9JRhuMmW9eX7N/3loyiJiXhodqp39O5RJsM8sd4DmkIIo5CZsZFxmqOlBLws9UGJ+oLpqLgkbndtkrSJiJR5tRRbI4cflGuSIFZlR5JQlpQAD//zYsSDIEL+SClYMAGFecgjQJ1CSdq92W7CPV/0hzWr5wxtLm91IyLs8lLHPP4ar+osAczftzKEYgW2qedzcYTroUV9czUQMdyq8S0W8whESwzBEgGKQKJHACWL5U+PEd9HM82YEEbzM6EkFUIHDAzAsBBgIKMh8Dvnv9bT3+1FJ2AKR4hAT+VRZDyRRfdKmaeI7nYpYOdfNvA9zj7/82DEkh0qylAFjxgAtO/5dn72l3L+NVKnttU7Lm36HhPVO7tZVmw6Ftdeaxi9ReHebMZrc5OjzC9P8HpvuNBjRBT3v926c3PUaeNPNtS4999mDWSu04hEhKcJxeWQ8htMKOZco0aVJXlVESEWFgUTWysSivbONvYuGJXAMbXZjmq7M1PVVYCFVj9j9lVVxjkqnKJErIkcmZnKqt//82LErB5TEkQBzzABVV+1a1PKMt8NAKLJWRRac7mzLAwBI4cSJEktbTSMscSJI4dW+q05L/nEt/7HEqrcNRY4kk6M1XnDiWmgwVVU8ydISDol4lUgCgVCwQx0KJZMjkSBCzCcXDucaUWVcPZUcjLzJlDAwT1HI1lkyNWscyNWsqT/ssll/8jVgoYGEdyFBQwUEHCArLKCBggVRyZW//NixMIeIvo4AnjMtKoKo5GslQ1YKGBhQQMI6ORnZc/8mVgoIOEQcSKChgYQO6GTKCBggQMEGDllTEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/zYsTZHSMBYAJhhlFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVU=';
+let tmVoice = null;
+function tmLoadVoice(){
+  if (tmVoice || !tmAudio) return;
+  try {
+    const bin = atob(ROBOT_MP3), bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    tmAudio.decodeAudioData(bytes.buffer, buf => { tmVoice = buf; }, () => {});
+  } catch (_) {}
+}
+function tmUnlockAudio(){ try { tmAudio = tmAudio || new (window.AudioContext || window.webkitAudioContext)(); tmAudio.resume(); tmLoadVoice(); } catch (_) {} }
+function tmBell(){                                       // a soft two-note "ding-dong"
+  if (!tmAudio) return;
+  try {
+    const t0 = tmAudio.currentTime;
+    [[659.25, 0], [523.25, 0.4]].forEach(([f, dt]) => [[1, 0.22], [2.01, 0.08], [3.02, 0.04]].forEach(([m, v]) => {
+      const o = tmAudio.createOscillator(), g = tmAudio.createGain(); o.type = 'sine'; o.frequency.value = f * m;
+      g.gain.setValueAtTime(0.0001, t0 + dt); g.gain.exponentialRampToValueAtTime(v, t0 + dt + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + 1.1);
+      o.connect(g); g.connect(tmAudio.destination); o.start(t0 + dt); o.stop(t0 + dt + 1.15);
+    }));
+  } catch (_) {}
+}
+function tmSayOneMinute(){
+  if (tmAudio && tmVoice){
+    const src = tmAudio.createBufferSource(); src.buffer = tmVoice; src.connect(tmAudio.destination); src.start(); return;
+  }
+  try { if ('speechSynthesis' in window){ const u = new SpeechSynthesisUtterance('One minute remaining'); u.pitch = 0.2; u.rate = 0.85; speechSynthesis.speak(u); } } catch (_) {}   // backup if the clip could not play
+}
+function tmOneMinute(){
+  if (S.timer.chime1) tmBell();
+  if (S.timer.robot) setTimeout(tmSayOneMinute, S.timer.chime1 ? 1000 : 0);
+}
+function tmChime(){
+  if (!S.timer.chime || !tmAudio) return;
+  try {
+    const t0 = tmAudio.currentTime;
+    [[784, 0], [988, 0.2], [1175, 0.4], [1568, 0.62]].forEach(([f, dt]) => {
+      const o = tmAudio.createOscillator(), g = tmAudio.createGain(); o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t0 + dt); g.gain.exponentialRampToValueAtTime(0.2, t0 + dt + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + 0.7);
+      o.connect(g); g.connect(tmAudio.destination); o.start(t0 + dt); o.stop(t0 + dt + 0.75);
+    });
+  } catch (_) {}
+}
+function tmCelebrate(){                       // the surprise itself (also used by the Test button)
+  const t = performance.now() / 1000;
+  startFx(pickFx(), t); tmUp = { t0: t }; tmChime();
+  pulse = 1; laughNow(t); newPose();
+  if (S.talk) speech = { text: bagPick('tm', TIMER_SAYS), kind: 'any', t0: t };
+}
+function tmFmt(sec){
+  sec = Math.ceil(sec - 1e-6); const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+  return (h ? h + ':' + String(m).padStart(2, '0') : String(m).padStart(2, '0')) + ':' + String(s).padStart(2, '0');
+}
+function tmRender(){
+  const txt = tmFmt(tm.left);
+  if (txt !== tm.shown){ tm.shown = txt; $('#tmDigits').textContent = txt; tmEl.setAttribute('aria-label', 'Lab timer, ' + txt + ' left'); }
+  $('#tmFill').style.width = (tm.total > 0 ? tm.left / tm.total * 100 : 0) + '%';
+  const st = tm.done ? 'done'
+    : (tm.running && tm.left <= 10 && tm.total > 40) ? 'urgent'                 // last 10 seconds (not for very short timers, so their halfway colour still shows)
+    : (tm.left <= 60 && tm.total > 120) ? 'warn'                               // the last minute of a longer timer
+    : tm.left <= tm.total / 2 ? 'half' : 'ok';                                 // halfway colour change
+  if (st !== tm.st){
+    const was = tm.st; tm.st = st;
+    if (was && tm.running){ tmEl.classList.remove('pop'); void tmEl.offsetWidth; tmEl.classList.add('pop'); setTimeout(() => tmEl.classList.remove('pop'), 700); }   // a little pop when the colour changes
+  }
+  tmEl.dataset.s = st;
+  tmEl.classList.toggle('run', tm.running);
+  $('#tmGo').textContent = tm.done ? 'Reset' : tm.running ? 'Pause' : 'Start';
+  $('#tmReset').hidden = tm.done;                  // when it is done the main button already says Reset
+}
+function tmSet(sec){ tm.total = tm.left = Math.max(1, Math.min(10800, Math.round(sec))); tm.running = false; tm.done = false; tm.warned = false; tmUp = null; tmRender(); }
+function tmReset(){ tm.running = false; tm.done = false; tm.warned = false; tm.left = tm.total; tmUp = null; tmRender(); }
+function tmTick(now){
+  if (!tm.running) return;
+  tm.left = Math.max(0, (tm.endAt - now) / 1000);
+  if (!tm.warned && tm.total >= 70 && tm.left <= 60 && tm.left > 0){ tm.warned = true; tmOneMinute(); }       // one minute left (not for timers of about a minute or less)
+  if (tm.left <= 0){ tm.running = false; tm.done = true; tmCelebrate(); }
+  tmRender();
+}
+function tmGo(){
+  if (tm.done){ tmReset(); return; }
+  if (tm.running){ tmTick(performance.now()); tm.running = false; }
+  else { if (tm.left <= 0) tm.left = tm.total; if (tm.left > 60) tm.warned = false; tm.endAt = performance.now() + tm.left * 1000; tm.running = true; tmUnlockAudio(); }
+  tmRender();
+}
+function tmAdd(sec){
+  if (tm.done) tmReset();
+  const nl = Math.max(1, Math.min(10800, tm.left + sec));
+  if (tm.running){ tm.endAt += (nl - tm.left) * 1000; tm.total = Math.max(tm.total, nl); } else tm.total = nl;
+  tm.left = nl; if (nl > 60) tm.warned = false; tmRender();
+}
+setInterval(() => tmTick(performance.now()), 250);       // keeps counting (and fires the chime) even if the tab is in the background
+
+/* ---------- lab timer: drag, resize, and settings ---------- */
+function tmPlace(){
+  const w = tmEl.offsetWidth, h = tmEl.offsetHeight;
+  tmEl.style.left = Math.round(S.timer.x * Math.max(0, innerWidth - w)) + 'px';
+  tmEl.style.top = Math.round(S.timer.y * Math.max(0, innerHeight - h)) + 'px';
+}
+const tmMaxSize = () => {                                   // the biggest size that still fits on screen
+  const rw = tmEl.offsetWidth / S.timer.size, rh = tmEl.offsetHeight / S.timer.size;
+  return rw > 0 && rh > 0 ? Math.max(14, Math.min(160, innerWidth * 0.96 / rw, innerHeight * 0.96 / rh)) : 160;
+};
+const tmClampSize = v => clamp(v, 14, tmMaxSize());
+function tmApplySize(anchor){                               // change the size but keep the top-left corner where it is
+  tmEl.style.setProperty('--tsz', S.timer.size + 'px');
+  if (anchor){
+    const w = tmEl.offsetWidth, h = tmEl.offsetHeight;
+    S.timer.x = innerWidth - w > 0 ? clamp(anchor.left / (innerWidth - w)) : 0; S.timer.y = innerHeight - h > 0 ? clamp(anchor.top / (innerHeight - h)) : 0;
+  }
+  tmPlace();
+}
+function tmShowHide(on){
+  S.timer.show = on; tmEl.hidden = !on; $('#bTimer').setAttribute('aria-pressed', on); $('#tmShow').checked = on;
+  if (on) tmApplySize(null); saveTimer();
+}
+const tmToggleShow = () => tmShowHide(!S.timer.show);
+let tmDrag = null;
+tmEl.addEventListener('pointerdown', e => {
+  if (e.target.closest('button')) return;
+  const r = tmEl.getBoundingClientRect();
+  tmDrag = e.target.id === 'tmGrip' ? { mode: 'size', sx: e.clientX, w: r.width, size: S.timer.size, left: r.left, top: r.top } : { mode: 'move', dx: e.clientX - r.left, dy: e.clientY - r.top };
+  tmEl.setPointerCapture(e.pointerId); tmEl.classList.add('drag'); e.preventDefault();
+});
+tmEl.addEventListener('pointermove', e => {
+  if (!tmDrag) return;
+  if (tmDrag.mode === 'move'){
+    const w = tmEl.offsetWidth, h = tmEl.offsetHeight, left = clamp(e.clientX - tmDrag.dx, 0, Math.max(0, innerWidth - w)), top = clamp(e.clientY - tmDrag.dy, 0, Math.max(0, innerHeight - h));
+    S.timer.x = innerWidth - w > 0 ? left / (innerWidth - w) : 0; S.timer.y = innerHeight - h > 0 ? top / (innerHeight - h) : 0; tmPlace();
+  } else {
+    S.timer.size = tmClampSize(tmDrag.size * (tmDrag.w + (e.clientX - tmDrag.sx)) / tmDrag.w); tmApplySize({ left: tmDrag.left, top: tmDrag.top });
+  }
+});
+const tmEnd = () => { if (!tmDrag) return; tmDrag = null; tmEl.classList.remove('drag'); saveTimer(); };
+tmEl.addEventListener('pointerup', tmEnd); tmEl.addEventListener('pointercancel', tmEnd);
+tmEl.addEventListener('wheel', e => {                        // zoom around the pointer, so the timer stays under the mouse
+  e.preventDefault(); const r = tmEl.getBoundingClientRect(), old = S.timer.size;
+  S.timer.size = tmClampSize(old * (e.deltaY < 0 ? 1.07 : 0.93));
+  const k = S.timer.size / old;
+  tmApplySize({ left: e.clientX - (e.clientX - r.left) * k, top: e.clientY - (e.clientY - r.top) * k }); saveTimer();
+}, { passive: false });
+tmEl.addEventListener('keydown', e => {                      // keyboard: arrows move, + and - resize
+  const step = e.shiftKey ? 0.05 : 0.01; let used = true;
+  if (e.key === 'ArrowLeft') S.timer.x = clamp(S.timer.x - step); else if (e.key === 'ArrowRight') S.timer.x = clamp(S.timer.x + step);
+  else if (e.key === 'ArrowUp') S.timer.y = clamp(S.timer.y - step); else if (e.key === 'ArrowDown') S.timer.y = clamp(S.timer.y + step);
+  else if (e.key === '+' || e.key === '=' ){ const r = tmEl.getBoundingClientRect(); S.timer.size = tmClampSize(S.timer.size * 1.08); tmApplySize({ left: r.left, top: r.top }); }
+  else if (e.key === '-'){ const r = tmEl.getBoundingClientRect(); S.timer.size = tmClampSize(S.timer.size * 0.92); tmApplySize({ left: r.left, top: r.top }); }
+  else used = false;
+  if (used){ e.preventDefault(); e.stopPropagation(); tmPlace(); saveTimer(); }
+});
+addEventListener('resize', () => { if (S.timer.show){ if (S.timer.size > tmMaxSize()) S.timer.size = tmMaxSize(); tmApplySize(null); } });
+$('#tmGo').onclick = tmGo; $('#tmReset').onclick = tmReset; $('#tmMinus').onclick = () => tmAdd(-60); $('#tmPlus').onclick = () => tmAdd(60);
+$('#bTimer').onclick = tmToggleShow;
+$('#tmShow').onchange = e => tmShowHide(e.target.checked);
+$('#tmMin').value = S.timer.minutes;
+const tmSetMinutes = m => { const n = Math.round(+m); m = isNaN(n) ? 10 : Math.max(1, Math.min(180, n)); S.timer.minutes = m; $('#tmMin').value = m; tmSet(m * 60); saveTimer(); };
+$('#tmMin').onchange = e => tmSetMinutes(e.target.value);
+document.querySelectorAll('#tmPresets [data-min]').forEach(b => b.onclick = () => tmSetMinutes(b.dataset.min));
+$('#tmChime').checked = S.timer.chime; $('#tmChime').onchange = e => { S.timer.chime = e.target.checked; saveTimer(); };
+$('#tmChime1').checked = S.timer.chime1; $('#tmChime1').onchange = e => { S.timer.chime1 = e.target.checked; saveTimer(); };
+$('#tmRobot').checked = S.timer.robot; $('#tmRobot').onchange = e => { S.timer.robot = e.target.checked; saveTimer(); };
+$('#tmTest1').onclick = () => { tmUnlockAudio(); setTimeout(tmOneMinute, 400); };
+$('#tmTest').onclick = () => { tmUnlockAudio(); setTimeout(tmCelebrate, 60); };
+$('#tmHome').onclick = () => { S.timer.x = 0.96; S.timer.y = 0.14; S.timer.size = 30; tmApplySize(null); saveTimer(); };
+tmRender(); tmEl.hidden = !S.timer.show; $('#bTimer').setAttribute('aria-pressed', S.timer.show); $('#tmShow').checked = S.timer.show; if (S.timer.show) tmApplySize(null);
+
 /* ---------- main loop ---------- */
 const dot = $('#dot'); let dotTimer = 0;
 function onBeat(t){
@@ -1611,6 +2080,7 @@ function frame(now){
   const dt = Math.min(0.05, (now - last) / 1000), t = now / 1000; last = now;
   if (updateAudio(t, dt)) onBeat(t);
   updateFade(t);
+  tmTick(now);
   pulse *= Math.exp(-dt * 6);
   hue += dt * (14 + bass * 50);
   if (dotTimer > 0 && (dotTimer -= dt) <= 0) dot.classList.remove('hit');
@@ -1621,6 +2091,7 @@ function frame(now){
   drawPeek(t);
   if (S.dancer && S.mode !== 3) drawDancer(t, dt);
   drawConfetti(dt);
+  drawFx(t, dt); drawTimesUp(t);
   updateTitle(t); drawTitle(t);
   ctx = ctx0;
   drawPicker();
@@ -1739,8 +2210,8 @@ $('#tstyle').onchange = e => { S.titleStyle = e.target.value; saveTitle(); };
 $('#tgap').value = String(S.titleGap);
 $('#tgap').onchange = e => { S.titleGap = +e.target.value; titleNext = -1; saveTitle(); };
 $('#bTitle').onclick = () => startTitle(performance.now() / 1000);
-$('#calm').checked = S.calm;
-$('#calm').onchange = e => S.calm = e.target.checked;
+$('#calm').checked = S.calm; document.body.classList.toggle('calm', S.calm);
+$('#calm').onchange = e => { S.calm = e.target.checked; document.body.classList.toggle('calm', S.calm); };
 
 addEventListener('keydown', e => {
   if (e.key === 'Escape' && picking){ closePicker(); return; }
@@ -1754,6 +2225,7 @@ addEventListener('keydown', e => {
   else if (k === 'm') laughNow(performance.now() / 1000);
   else if (k === 'c') celebrate(performance.now() / 1000);
   else if (k === 'v') speak(lastSong);
+  else if (k === 'l') tmToggleShow();
   else if (k === 't') startTitle(performance.now() / 1000);
   wake();
 });
