@@ -186,10 +186,18 @@ body.bg-slides #hot{display:block}
 
   <section class="grp" aria-labelledby="g-dancer">
     <h3 id="g-dancer">Dancer</h3>
-    <label>Dancer changes move every
-      <select id="every"><option value="1">beat</option><option value="2" selected>2 beats</option><option value="4">4 beats</option></select></label>
+    <label>Dancer changes pose every
+      <select id="every"><option value="1" selected>beat</option><option value="2">2 beats</option><option value="4">4 beats</option></select></label>
     <label>Big laugh moments
       <select id="laugh"><option value="5">Often</option><option value="9" selected>Sometimes</option><option value="18">Rarely</option><option value="0">Never</option></select></label>
+    <label>Dance moves
+      <select id="moveSel"><option value="random" selected>Surprise me (moves and poses)</option><option value="poses">Just the simple poses</option><option value="sidestep">Side to side walk</option><option value="egyptian">Walk like an Egyptian</option><option value="jumpspin">Jump and spin</option><option value="pirouette">Spin in place</option><option value="floorspin">Spin on the ground</option><option value="headspin">Spinning headstand</option><option value="kazachok">Russian squat kicks</option><option value="disco">Disco point</option><option value="moonwalk">Moonwalk</option><option value="floss">The floss</option><option value="robot">Robot</option><option value="twist">The twist</option><option value="jacks">Jumping jacks</option><option value="cartwheel">Cartwheels</option><option value="worm">The worm</option><option value="sprinkler">The sprinkler</option><option value="conga">Conga steps</option><option value="cancan">Can-can kicks</option><option value="charleston">The Charleston</option><option value="hula">Hula sway</option><option value="chicken">The chicken dance</option><option value="macarena">The Macarena</option><option value="zombie">Zombie shuffle</option><option value="leap">Ballet leaps</option><option value="backflip">Backflips</option><option value="irish">Irish step dance</option><option value="congaline">Conga line (a crew of you)</option><option value="chorus">Chorus line (a crew of you)</option><option value="tango">Tango (two of you)</option></select></label>
+    <div class="row"><button class="pill" id="nextMove">Next move</button></div>
+    <label>Crew size (conga and chorus lines)
+      <select id="crewN"><option value="3">3 of you</option><option value="5" selected>5 of you</option><option value="7">7 of you</option></select></label>
+    <label>How often a crew shows up on its own
+      <select id="crewEvery"><option value="60">Often (about every minute)</option><option value="180" selected>Sometimes (about every 3 minutes)</option><option value="300">Rarely (about every 5 minutes)</option><option value="0">Never (only from the menu)</option></select></label>
+    <div class="row"><button class="pill" id="crewNow">Show a crew now</button></div>
     <label class="chk"><input type="checkbox" id="talkOn" checked> The dancer talks when a new song starts</label>
     <label>Silly genie stories
       <select id="genieAmt"><option value="0.1" selected>Sometimes (1 in 10)</option><option value="0.25">Often (1 in 4)</option><option value="0">Never</option></select></label>
@@ -294,7 +302,7 @@ body.bg-slides #hot{display:block}
   <section class="grp" aria-labelledby="g-comfort">
     <h3 id="g-comfort">Comfort and keys</h3>
     <label class="chk"><input type="checkbox" id="calm"> Calm mode (gentler flashing)</label>
-    <p class="small">Keys: 1 to 5 switch style; D dancer; M laugh now; C celebrate; V dancer speaks; L lab timer; T fly the title in; F fullscreen; S settings.</p>
+    <p class="small">Keys: 1 to 5 switch style; D dancer; M laugh now; C celebrate; V dancer speaks; N next dance move; G a crew of you; L lab timer; T fly the title in; F fullscreen; S settings.</p>
   </section>
 </aside>
 
@@ -352,7 +360,7 @@ function resize(){
 addEventListener('resize', resize); resize();
 
 /* ---------- settings / state ---------- */
-const S = { mode:0, auto:false, dancer:true, every:2, sens:5, gain:1.2,
+const S = { mode:0, auto:false, dancer:true, every:1, sens:5, gain:1.2,
             headSize:1.4, zoom:1.05, circle:false,
             calm: matchMedia('(prefers-reduced-motion: reduce)').matches };
 const NB = 64;
@@ -974,27 +982,295 @@ const POSES = [
 ];
 const D2R = Math.PI / 180;
 let cur = POSES[0].map(v => v * D2R), vel = new Array(10).fill(0), tgt = cur.slice(), lastPose = 0, phase = 0;
-function newPose(){
-  let i; do { i = 1 + ((Math.random() * (POSES.length - 1)) | 0); } while (i === lastPose);
-  lastPose = i;
-  let p = POSES[i].slice();
-  if (Math.random() < 0.5) p = [-p[0], -p[1], -p[4], -p[5], -p[2], -p[3], -p[8], -p[9], -p[6], -p[7]];
-  tgt = p.map(v => v * D2R);
+/* ---------- dance moves: routines that move the whole body, in time with the beat ---------- */
+// A move is a function of u (beats since it started). It returns the ten joint angles in degrees
+// [torso, head, L upper arm, L forearm, R upper arm, R forearm, L thigh, L shin, R thigh, R shin]
+// plus optional rx (slide, in body units), ry (lift), rot (turn the whole body over, radians),
+// sx (squeeze across, which fakes spinning around a vertical axis), hs (head slide) and snap/still.
+const mvEase = x => x * x * (3 - 2 * x);
+const mvLerp = (a, b, t) => a + (b - a) * t;
+const mixP = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+const mvRamp = (u, len, b = 0.5) => mvEase(clamp(Math.min(u, len - u) / b));
+const STAND = POSES[0];
+const mirrorP = p => [-p[0], -p[1], -p[4], -p[5], -p[2], -p[3], -p[8], -p[9], -p[6], -p[7]];
+const ROBOT = [
+  [0, 0, -90, -180, 90, 0, -14, -14, 14, 14], [0, 15, -90, 0, 90, 180, -14, -14, 14, 14], [0, 0, -90, -180, 90, 180, -6, -6, 6, 6],
+  [0, -15, -90, -90, 90, 90, -14, -14, 14, 14], [8, 0, -180, -180, 90, 90, -14, -14, 14, 14], [-8, 0, -90, -90, 180, 180, -14, -14, 14, 14],
+  [0, 15, -50, 40, 50, -40, -6, -6, 6, 6], [0, 0, -178, -178, 178, 178, -14, -14, 14, 14]
+];
+const MOVES = {
+  sidestep: { label: 'Side to side walk', len: 8, f(u){
+    const w = mvRamp(u, 8, 0.6), k = u % 2, ll = k < 1 ? Math.sin(Math.PI * k) : 0, rl = k >= 1 ? Math.sin(Math.PI * (k - 1)) : 0;
+    const sw = Math.sin(Math.PI * u), d = Math.cos(Math.PI * u / 4);
+    const p = [5 * d, 4 * sw, -20 + 28 * sw, -20 + 28 * sw + 22, 20 - 28 * sw, 20 - 28 * sw - 22, -8 - 26 * ll, -8 + 28 * ll, 8 + 26 * rl, 8 - 28 * rl];
+    return { p: mixP(STAND, p, w), rx: 0.85 * Math.sin(Math.PI * u / 4), ry: -0.012 * Math.abs(sw) * w };
+  } },
+  egyptian: { label: 'Walk like an Egyptian', len: 8, f(u){
+    const w = mvRamp(u, 8, 0.6), s = Math.tanh(4 * Math.sin(Math.PI * u)), k = u % 2, ll = k < 1 ? Math.sin(Math.PI * k) : 0, rl = k >= 1 ? Math.sin(Math.PI * (k - 1)) : 0;
+    const p = [0, 0, -90, mvLerp(0, -180, (1 + s) / 2), 90, mvLerp(0, 180, (1 - s) / 2), -8 - 18 * ll, -8 + 22 * ll, 8 + 18 * rl, 8 - 22 * rl];
+    return { p: mixP(STAND, p, w), rx: 0.55 * Math.sin(Math.PI * u / 4), hs: 0.07 * s * w };
+  } },
+  jumpspin: { label: 'Jump and spin', len: 4, f(u){
+    const fr = (u % 2) / 2, g = Math.sin(Math.PI * fr), air = 4 * fr * (1 - fr);
+    const p = [0, 0, mvLerp(-25, -165, g), mvLerp(-10, -172, g), mvLerp(25, 165, g), mvLerp(10, 172, g), mvLerp(-6, -14, g), mvLerp(-4, 10, g), mvLerp(6, 14, g), mvLerp(4, -10, g)];
+    return { p, ry: -0.30 * air, sx: Math.cos(2 * Math.PI * fr) };
+  } },
+  pirouette: { label: 'Spin in place', len: 4, f(u){
+    const w = mvRamp(u, 4, 0.5);
+    return { p: mixP(STAND, [0, 3, -158, -172, 158, 172, -6, -4, 52, -24], w), sx: Math.cos(Math.PI * u) };
+  } },
+  floorspin: { label: 'Spin on the ground', len: 4, f(u){
+    const w = mvRamp(u, 4, 0.7);
+    return { p: mixP(STAND, [0, 0, -175, -175, 175, 175, -34, -34, 34, 34], w), rot: Math.PI / 2 * w, sx: Math.cos(2 * Math.PI * u) };
+  } },
+  headspin: { label: 'Spinning headstand', len: 6, f(u){
+    const w = mvRamp(u, 6, 1.0), th = u >= 1 && u <= 5 ? Math.PI * (u - 1) : 0;
+    return { p: mixP(STAND, [0, 0, -150, -150, 150, 150, -30, -30, 30, 30], w), rot: Math.PI * w, sx: Math.cos(th) };
+  } },
+  kazachok: { label: 'Russian squat kicks', len: 8, f(u){
+    const w = mvRamp(u, 8, 0.5), s = Math.sin(Math.PI * u), kl = Math.max(0, s), kr = Math.max(0, -s);
+    const p = [6 * (kl - kr), 0, 28, 100, -28, -100, -55 - 33 * kl - 10 * kr, -5 - 83 * kl + 5 * kr, 55 + 33 * kr + 10 * kl, 5 + 83 * kr - 5 * kl];
+    return { p: mixP(STAND, p, w) };
+  } },
+  disco: { label: 'Disco point', len: 8, f(u){
+    const w = mvRamp(u, 8, 0.5), m = (1 + Math.tanh(2.5 * Math.sin(Math.PI * u))) / 2, q = 2 * m - 1;
+    const p = [-8 * q, 12 * q, mvLerp(35, -148, 1 - m), mvLerp(40, -148, 1 - m), mvLerp(-35, 148, m), mvLerp(-40, 148, m), -12 - 18 * (1 - m), -6, 12 + 18 * m, 6];
+    return { p: mixP(STAND, p, w) };
+  } },
+  moonwalk: { label: 'Moonwalk', len: 8, f(u){
+    const w = mvRamp(u, 8, 0.6), s = Math.sin(Math.PI * u), d = Math.cos(Math.PI * u / 4);
+    const p = [-6 * d, 8 * s, -62, 141, 15 + 18 * s, 25 + 18 * s, -8 + 14 * s, -8 + 14 * s, 8 - 14 * s, 8 - 14 * s];
+    return { p: mixP(STAND, p, w), rx: 0.8 * Math.sin(Math.PI * u / 4) };
+  } },
+  floss: { label: 'The floss', len: 8, f(u){
+    const w = mvRamp(u, 8, 0.5), psi = 38 * Math.sin(Math.PI * u);
+    const p = [-psi * 0.22, -psi * 0.1, -12 + psi, -12 + psi * 0.9, 12 + psi, 12 + psi * 0.9, -8 - psi * 0.15, -8 - psi * 0.15, 8 - psi * 0.15, 8 - psi * 0.15];
+    return { p: mixP(STAND, p, w), rx: -0.05 * Math.sin(Math.PI * u) };
+  } },
+  robot: { label: 'Robot', len: 8, f(u){
+    return { p: ROBOT[Math.floor(u) % 8].slice(), snap: true, still: true };
+  } },
+  twist: { label: 'The twist', len: 8, f(u){
+    const w = mvRamp(u, 8, 0.6), s = Math.sin(2 * Math.PI * u), th = 1.15 * s;
+    const p = [-8 * s, 6 * s, -35 + 40 * s, -20 + 40 * s, 35 + 40 * s, 50 + 40 * s, -30, -4, 30, 4];
+    return { p: mixP(STAND, p, w), sx: mvLerp(1, Math.cos(th), w) };
+  } },
+  jacks: { label: 'Jumping jacks', len: 8, f(u){
+    const w = mvRamp(u, 8, 0.4), m = 0.5 - 0.5 * Math.cos(Math.PI * u);
+    const p = [0, 0, mvLerp(-12, -165, m), mvLerp(-12, -172, m), mvLerp(12, 165, m), mvLerp(12, 172, m), mvLerp(-5, -32, m), mvLerp(-5, -32, m), mvLerp(5, 32, m), mvLerp(5, 32, m)];
+    return { p: mixP(STAND, p, w), ry: -0.07 * Math.abs(Math.sin(Math.PI * u)) * w };
+  } },
+  cartwheel: { label: 'Cartwheels', len: 5, f(u){
+    let rot = 0, rx = 0;
+    if (u < 0.5) rx = -0.55 * mvEase(u / 0.5);
+    else if (u < 2.5){ const fr = (u - 0.5) / 2; rot = 2 * Math.PI * fr; rx = -0.55 + 1.1 * fr; }
+    else if (u < 4.5){ const fr = (u - 2.5) / 2; rot = -2 * Math.PI * fr; rx = 0.55 - 1.1 * fr; }
+    else rx = -0.55 * (1 - mvEase((u - 4.5) / 0.5));
+    const g = Math.min(clamp((u - 0.25) / 0.25), 1 - clamp((u - 4.5) / 0.3));
+    return { p: mixP(STAND, [0, 0, -172, -172, 172, 172, -28, -28, 28, 28], g), rot, rx };
+  } },
+  worm: { label: 'The worm', len: 8, f(u){
+    // drop to the floor, crawl one way and then back, stand up. A wave ripples from the chest to the feet and pushes the body along.
+    const w = mvRamp(u, 8, 1.0), tau = clamp((u - 1) / 6, 0, 1), phi = 2 * Math.PI * tau, A = 0.45;
+    const q = Math.min(3, Math.floor(phi / (Math.PI / 2))), r = phi - q * Math.PI / 2;
+    const s = A * (q + (q % 2 === 0 ? Math.sin(r) : 1 - Math.cos(r)));          // distance crawled so far
+    const psi = 2 * Math.PI * s / 0.55, dir = Math.tanh(3 * Math.cos(phi));    // wave phase, and which way the body is crawling
+    const c = Math.sin(psi), k = Math.sin(psi - dir * 2.6), g = Math.sin(psi - dir * 4.2);
+    const p0 = -34 * c;
+    const p = [p0, -p0 - 90 + 6 * Math.sin(psi + 0.5), 14 + 8 * c, 8 - 6 * c, -10 - 8 * c, -6 + 6 * c, -28 * k, -34 * g, -28 * k, -34 * g];     // arms tucked along the body so he lies on the floor
+    return { p: mixP(STAND, p, w), rx: A * Math.sin(phi), rot: Math.PI / 2 * w, still: true };
+  } },
+  sprinkler: { label: 'The sprinkler', len: 8, f(u){
+    // one hand behind the neck, the other arm jerks out in little steps, then the arms swap
+    const w = mvRamp(u, 8, 0.5), t = Math.floor((u % 2) * 5), right = u < 4, a = 75 + 8.5 * t;
+    let p = [0, 8, -100, 128, a, a, -10, -6, 10, 6];
+    if (!right) p = mirrorP(p);
+    p[0] = (right ? 1 : -1) * (3 + 0.5 * t);
+    return { p: mixP(STAND, p, w), ry: -0.012 * (t % 2) * w };
+  } },
+  conga: { label: 'Conga steps', len: 8, f(u){
+    // step, step, step, KICK, drifting across the stage with hands on hips
+    const w = mvRamp(u, 8, 0.5), b = Math.floor(u % 4), lift = Math.sin(Math.PI * (u % 1));
+    let lL = -8, sL = -8, lR = 8, sR = 8, up = 0;
+    if (b === 0 || b === 2){ lL = -8 - 26 * lift; sL = -8 + 28 * lift; }
+    else if (b === 1){ lR = 8 + 26 * lift; sR = 8 - 28 * lift; }
+    else { lR = 8 + 70 * lift; sR = 8 + 75 * lift; up = lift; }
+    const p = [6 * Math.sin(Math.PI * u), 6 * Math.sin(Math.PI * u + 1), mvLerp(-55, -150, up), mvLerp(40, -150, up), mvLerp(55, 150, up), mvLerp(-40, 150, up), lL, sL, lR, sR];
+    return { p: mixP(STAND, p, w), rx: 0.6 * Math.sin(Math.PI * u / 4) };
+  } },
+  cancan: { label: 'Can-can kicks', len: 8, f(u){
+    const w = mvRamp(u, 8, 0.5), s = Math.sin(2 * Math.PI * u), kl = Math.max(0, s), kr = Math.max(0, -s);
+    const p = [8 * (kl - kr), 6 * (kl - kr), -50, -10, 50, 10, -8 - 76 * kl, -8 - 78 * kl, 8 + 76 * kr, 8 + 78 * kr];
+    return { p: mixP(STAND, p, w), ry: -0.04 * Math.abs(s) * w };
+  } },
+  charleston: { label: 'The Charleston', len: 8, f(u){
+    // alternating flick-kicks with the opposite arm swinging up
+    const w = mvRamp(u, 8, 0.5), s = Math.sin(Math.PI * u), kl = Math.max(0, s), kr = Math.max(0, -s);
+    const p = [5 * (kl - kr), 5 * (kr - kl), -20 - 85 * kr, -25 - 115 * kr, 20 + 85 * kl, 25 + 115 * kl, -8 - 38 * kl, -6 + 20 * kl, 8 + 38 * kr, 6 - 20 * kr];
+    return { p: mixP(STAND, p, w), ry: -0.02 * Math.abs(s) * w };
+  } },
+  hula: { label: 'Hula sway', len: 8, f(u){
+    const w = mvRamp(u, 8, 0.6), s = Math.sin(Math.PI * u), c = Math.cos(Math.PI * u), wv = Math.sin(Math.PI * u + 1);
+    const p = [-12 * s, 10 * s, -72 + 22 * s, -100 + 34 * wv, 72 + 22 * s, 100 + 34 * wv, -14 + 8 * s, -10 + 6 * s, 14 + 8 * s, 10 + 6 * s];
+    return { p: mixP(STAND, p, w), rx: 0.06 * s, ry: -0.012 * Math.abs(c) * w };
+  } },
+  chicken: { label: 'The chicken dance', len: 8, f(u){
+    // beaks, wings, tail feathers, clap: four beats each, over and over
+    const w = mvRamp(u, 8, 0.4), b = Math.floor(u % 4), h = Math.floor((u % 1) * 2) % 2, sg = h ? 1 : -1;
+    let p;
+    if (b === 0) p = [0, 6 * sg, -20, -168 + 18 * h, 20, 168 - 18 * h, -12, -6, 12, 6];
+    else if (b === 1) p = [0, 0, -92 + 26 * sg, -15, 92 - 26 * sg, 15, -10, -6, 10, 6];
+    else if (b === 2) p = [14 * sg, 0, -52, 40, 52, -40, -26, -4, 26, 4];
+    else p = [0, 0, -150 - 26 * h, -150 - 26 * h, 150 + 26 * h, 150 + 26 * h, -8, -6, 8, 6];
+    return { p: mixP(STAND, p, w), ry: -0.012 * h * w };
+  } },
+  macarena: { label: 'The Macarena', len: 8, f(u){
+    const w = mvRamp(u, 8, 0.4), b = Math.floor(u) % 8;
+    const ARMS = [[-15, -10, 90, 90], [-90, -90, 90, 90], [-90, -100, 90, 100], [-90, -80, 90, 80],
+                  [-90, -90, 10, -130], [-10, 130, 10, -130], [-100, 128, 100, -128], [-52, 40, 52, -40]];
+    const a = ARMS[b], sway = b >= 6 ? 8 * Math.sin(2 * Math.PI * u) : 0;
+    const p = [sway, 0.6 * sway, a[0], a[1], a[2], a[3], -8 + 0.4 * sway, -6, 8 + 0.4 * sway, 6];
+    return { p: mixP(STAND, p, w), ry: -0.015 * Math.abs(Math.sin(Math.PI * u)) * w };
+  } },
+  zombie: { label: 'Zombie shuffle', len: 8, f(u){
+    const w = mvRamp(u, 8, 0.6), s = Math.sin(Math.PI * u), k = u % 2, ll = k < 1 ? Math.sin(Math.PI * k) : 0, rl = k >= 1 ? Math.sin(Math.PI * (k - 1)) : 0;
+    const p = [10 + 4 * s, 16 + 8 * Math.sin(Math.PI * u * 0.5 + 1), -32, -160 + 10 * s, 32, 160 - 10 * s, -8 - 14 * ll, -8 + 16 * ll, 8 + 14 * rl, 8 - 16 * rl];
+    return { p: mixP(STAND, p, w), rx: 0.35 * Math.sin(Math.PI * u / 4), hs: 0.03 * Math.sin(Math.PI * u * 0.5) * w, ry: -0.012 * Math.abs(s) * w };
+  } },
+  leap: { label: 'Ballet leaps', len: 5, f(u){
+    // leap across the stage with a split in the air, then leap back
+    const A = 0.5; let rx = 0, air = 0, g = 0, lean = 0;
+    if (u < 0.5) rx = -A * mvEase(u / 0.5);
+    else if (u < 4.5){
+      const e = u - 0.5, first = e < 2, fr = (e % 2) / 2;
+      rx = first ? -A + 2 * A * fr : A - 2 * A * fr; air = 4 * fr * (1 - fr); g = Math.sin(Math.PI * fr); lean = first ? 1 : -1;
+    } else rx = -A * (1 - mvEase((u - 4.5) / 0.5));
+    const ws = Math.pow(g, 0.7), env = clamp((u - 0.25) / 0.25) * (1 - clamp((u - 4.5) / 0.25));
+    const p = [6 * lean * ws, 0, mvLerp(-30, -150, ws), mvLerp(-15, -160, ws), mvLerp(30, 150, ws), mvLerp(15, 160, ws),
+               mvLerp(-24, -82, ws), mvLerp(-2, -82, ws), mvLerp(24, 82, ws), mvLerp(2, 82, ws)];
+    return { p: mixP(STAND, p, env), rx, ry: -0.30 * air };
+  } },
+  backflip: { label: 'Backflips', len: 5, f(u){
+    const SQUAT = [0, 0, -38, -24, 38, 24, -38, -4, 38, 4], TUCK = [0, 0, -50, 20, 50, -20, -62, 40, 62, -40];
+    let fr = 0, rot = 0, air = 0, sq, tuck = 0;
+    if (u >= 0.5 && u < 4.5){
+      const e = u - 0.5; fr = (e % 2) / 2; rot = -2 * Math.PI * fr; air = 4 * fr * (1 - fr);
+      tuck = clamp((fr - 0.15) / 0.2) * (1 - clamp((fr - 0.7) / 0.2)); sq = (1 - clamp(fr / 0.15)) + clamp((fr - 0.85) / 0.15);
+    } else sq = u < 0.5 ? mvEase(u / 0.5) : 1 - mvEase((u - 4.5) / 0.5);
+    return { p: mixP(mixP(STAND, SQUAT, clamp(sq)), TUCK, tuck), rot, ry: -0.42 * air };
+  } },
+  irish: { label: 'Irish step dance', len: 8, f(u){
+    // stiff upper body, arms tight at the sides, legs flying
+    const w = mvRamp(u, 8, 0.5), s = Math.sin(2 * Math.PI * u), kl = Math.max(0, s), kr = Math.max(0, -s);
+    const p = [0, 0, -5, -5, 5, 5, -6 + 30 * kl, -4 + 58 * kl, 6 - 30 * kr, 4 - 58 * kr];
+    return { p: mixP(STAND, p, w), ry: -0.05 * Math.abs(s) * w, still: true };
+  } }
+};
+const MOVE_ORDER = Object.keys(MOVES);
+let mv = null;
+function startMove(name){ if (MOVES[name]) mv = { name, def: MOVES[name], u: 0 }; }
+
+/* ---------- crews: several copies of him dancing together (conga line, chorus line, tango) ---------- */
+function congaPose(u){                       // step, step, step, KICK (the same pattern as the Conga steps routine)
+  const b = ((Math.floor(u) % 4) + 4) % 4, fr = ((u % 1) + 1) % 1, lift = Math.sin(Math.PI * fr);
+  let lL = -8, sL = -8, lR = 8, sR = 8, up = 0;
+  if (b === 0 || b === 2){ lL = -8 - 26 * lift; sL = -8 + 28 * lift; }
+  else if (b === 1){ lR = 8 + 26 * lift; sR = 8 - 28 * lift; }
+  else { lR = 8 + 70 * lift; sR = 8 + 75 * lift; up = lift; }
+  return [6 * Math.sin(Math.PI * u), 6 * Math.sin(Math.PI * u + 1), mvLerp(-55, -150, up), mvLerp(40, -150, up), mvLerp(55, 150, up), mvLerp(-40, 150, up), lL, sL, lR, sR];
 }
-const seg = (a, b, w) => { ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); };
-const end = (o, a, l) => ({ x: o.x + Math.sin(a) * l, y: o.y + Math.cos(a) * l });
-
-function drawDancer(t, dt){
-  if (level < 0.03 && running) tgt = POSES[0].map(v => v * D2R);
-  for (let i = 0; i < 10; i++){
-    const a = (tgt[i] - cur[i]) * 240 - vel[i] * 20;
-    vel[i] += a * dt; cur[i] += vel[i] * dt;
+// Each crew routine returns { figs, span, open }. A figure is { p (degrees), dx (body units from the leader), ry, rot, sx, hs, alpha, hue, dress, col, z, lead }.
+const CREW = {
+  congaline: { label: 'Conga line (a crew of you)', len: 18.5, f(u, N){
+    // follow the leader: every copy does the leader's steps a little later, rippling out from the middle
+    const half = (N - 1) / 2, D = 0.5, sp = 0.46, edge = Math.min(u, 18.5 - u);
+    const open = mvEase(clamp(edge / 1.2)), alpha = clamp(edge / 0.8), figs = [];
+    for (let j = -half; j <= half; j++){
+      const k = Math.abs(j), ub = u - k * D;
+      figs.push({ p: mixP(STAND, congaPose(ub), mvRamp(ub, 16, 0.5)), dx: j * sp * open, alpha: k === 0 ? 1 : alpha, hue: j * 35, z: k === 0 ? 100 : -k, lead: k === 0 });
+    }
+    return { figs, span: (N - 1) * sp + 0.9, open };
+  } },
+  chorus: { label: 'Chorus line (a crew of you)', len: 18, f(u, N){
+    // everyone in unison with linked arms: a sway, a high kick line, then a big finish
+    const half = (N - 1) / 2, sp = 0.45, edge = Math.min(u, 18 - u);
+    const open = mvEase(clamp(edge / 1.0)), alpha = clamp(edge / 0.8);
+    const link = mvEase(clamp((u - 0.6) / 1.0)) * (1 - mvEase(clamp((u - 16.2) / 0.8)));
+    const sway = u >= 1.6 && u <= 5.6 ? Math.sin(Math.PI * (u - 1.6)) : 0;
+    const kOn = clamp((u - 5.6) / 0.25) * (1 - clamp((u - 13.6) / 0.25)), ks = Math.sin(Math.PI * (u - 5.6));
+    const kl = Math.max(0, ks) * kOn, kr = Math.max(0, -ks) * kOn;
+    const ta = mvEase(clamp((u - 13.6) / 0.5)) * (1 - mvEase(clamp((u - 16.0) / 0.6)));
+    const aL = mvLerp(mvLerp(-25, -90, link), -150, ta), fL = mvLerp(mvLerp(-10, -90, link), -160, ta);
+    const aR = mvLerp(mvLerp(25, 90, link), 150, ta), fR = mvLerp(mvLerp(10, 90, link), 160, ta);
+    let p = [8 * sway + 6 * (kl - kr), 0, aL, fL, aR, fR, -8 - 14 * Math.max(0, sway) - 88 * kl, -8 - 90 * kl, 8 + 14 * Math.max(0, -sway) + 88 * kr, 8 + 90 * kr];
+    p = mixP(STAND, p, clamp(edge / 0.6));
+    const figs = [];
+    for (let j = -half; j <= half; j++) figs.push({ p, dx: j * sp * open, ry: -0.04 * Math.abs(ks) * kOn, alpha: j === 0 ? 1 : alpha, hue: j * 35, z: -Math.abs(j), lead: j === 0 });
+    return { figs, span: (N + 1) * sp, open };
+  } },
+  tango: { label: 'Tango (two of you)', len: 18, f(u){
+    // him, and him in a cool dress: they walk, snap their heads, twirl round each other, and finish with a dip
+    const D = 0.50, wA = mvEase(clamp(u / 1.2)) * (1 - mvEase(clamp((u - 16.8) / 1.2)));
+    const ent = mvEase(clamp(u / 2.5)), ex = mvEase(clamp((u - 16.4) / 1.6));
+    const tt = clamp((u - 2.5) / 8), travel = 0.5 * Math.sin(2 * Math.PI * tt);
+    const walk = u >= 2.5 && u <= 10.5 ? 1 : 0, bt = u - 2.5, k = ((Math.floor(bt) % 2) + 2) % 2, fr = ((bt % 1) + 1) % 1;
+    const stac = mvEase(clamp(fr / 0.45)) * (1 - mvEase(clamp((fr - 0.45) / 0.45))) * walk;
+    const ll = k === 0 ? stac : 0, rl = k === 1 ? stac : 0, snap = walk ? Math.tanh(5 * Math.sin(Math.PI * bt / 2)) : 0;
+    const orb = u >= 10.5 && u <= 12.5, th = Math.PI * (u - 10.5), dlt = orb ? (D / 2) * (1 - Math.cos(th)) : 0;
+    const tw = mvEase(clamp((u - 10.3) / 0.4)) * (1 - mvEase(clamp((u - 12.5) / 0.4)));
+    const dp = mvEase(clamp((u - 13.6) / 0.6)) * (1 - mvEase(clamp((u - 16.4) / 0.6)));
+    const HOLD = [6, -26 * snap, -130, -160, 45, 164, -8 - 22 * ll, -8 + 26 * ll, 8 + 22 * rl, 8 - 26 * rl];
+    const FLOUR = [0, 0, -150, -160, 150, 160, -8, -8, 8, 8], DIP = [16, 10, -150, -165, 70, 70, -48, -6, 30, 30];
+    const pA = mixP(STAND, mixP(mixP(HOLD, FLOUR, tw), DIP, dp), wA);
+    const HOLDB = mirrorP(HOLD); HOLDB[1] = -26 * snap; HOLDB[4] = 55; HOLDB[5] = 20;       // her outer hand holds the skirt
+    const FLOURB = mirrorP(FLOUR), DIPB = [48, 22, -70, -110, 150, 170, -30, -30, 25, -20];
+    const pB = mixP(STAND, mixP(mixP(HOLDB, FLOURB, tw), DIPB, dp), wA);
+    const ax = -0.22 * wA + travel + dlt, sinT = orb ? Math.sin(th) : 0;
+    return { figs: [
+      { p: pA, dx: ax, alpha: 1, z: sinT > 0 ? 10 : 1, lead: true },
+      { p: pB, dx: ax - 0 + D - 2 * dlt - 0.10 * dp + (1 - ent) * 1.1 + ex * 1.1, alpha: clamp(u / 0.8) * (1 - clamp((u - 17) / 1.0)), dress: true, col: '#ff5aa5', z: sinT > 0 ? 0 : 10 }
+    ], span: 1.7, open: wA };
+  } }
+};
+const CREW_ORDER = Object.keys(CREW);
+let grp = null, crewClock = 0, crewNext = 180, crewDue = false, crewInit = false;
+function resetCrewTimer(){ crewClock = 0; crewDue = false; crewNext = Math.max(10, S.crewEvery) * (0.85 + Math.random() * 0.3); }
+function startGroup(name){
+  const def = CREW[name]; if (!def) return;
+  mv = null; resetCrewTimer();
+  grp = { name, def, u: 0, from: cur.map(v => v / D2R) };
+}
+function endGroup(){
+  grp = null; tgt = STAND.map(v => v * D2R);
+  for (let i = 0; i < 10; i++){ cur[i] = tgt[i]; vel[i] = 0; }
+}
+// a sparkly dress: fitted bodice, a skirt that swings with the legs, a gold belt and twinkling sequins
+function drawDress(k, t){
+  const hemL = { x: k.knL.x + (k.ftL.x - k.knL.x) * 0.45 - 0.085, y: k.knL.y + (k.ftL.y - k.knL.y) * 0.45 };
+  const hemR = { x: k.knR.x + (k.ftR.x - k.knR.x) * 0.45 + 0.085, y: k.knR.y + (k.ftR.y - k.knR.y) * 0.45 };
+  const midX = (hemL.x + hemR.x) / 2, midY = Math.max(hemL.y, hemR.y) + 0.012;
+  const g = ctx.createLinearGradient(0, -0.30, 0, 0.32);
+  g.addColorStop(0, '#ff5a96'); g.addColorStop(0.5, '#d3157a'); g.addColorStop(1, '#6a1b9a');
+  ctx.save(); ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(k.shL.x + 0.01, k.shL.y + 0.02); ctx.lineTo(k.shR.x - 0.01, k.shR.y + 0.02); ctx.lineTo(k.hR.x + 0.03, k.hR.y - 0.03);
+  ctx.bezierCurveTo(k.hR.x + 0.07, 0.04, hemR.x + 0.03, hemR.y - 0.10, hemR.x, hemR.y);
+  ctx.quadraticCurveTo((hemR.x + midX) / 2, midY + 0.02, midX, midY);
+  ctx.quadraticCurveTo((hemL.x + midX) / 2, midY + 0.02, hemL.x, hemL.y);
+  ctx.bezierCurveTo(hemL.x - 0.03, hemL.y - 0.10, k.hL.x - 0.07, 0.04, k.hL.x - 0.03, k.hL.y - 0.03);
+  ctx.closePath();
+  ctx.shadowColor = '#ff5aa5'; ctx.shadowBlur = 22; ctx.fillStyle = g; ctx.fill(); ctx.shadowBlur = 0;
+  ctx.lineWidth = 0.014; ctx.strokeStyle = '#ffd1e6'; ctx.stroke();
+  ctx.strokeStyle = '#ffe14a'; ctx.lineWidth = 0.016; ctx.beginPath(); ctx.moveTo(k.hL.x - 0.05, -0.03); ctx.lineTo(k.hR.x + 0.05, -0.03); ctx.stroke();
+  for (let i = 0; i < 10; i++){                                            // sequins
+    const tw = Math.sin(t * 5 + i * 1.7); if (tw < 0.1) continue;
+    fxStar(midX + ((((i * 37) % 11) / 10) - 0.5) * 0.24, 0.03 + (((i * 53) % 9) / 9) * 0.19, 0.022 * tw, '#ffffff', tw);
   }
-  phase += dt * Math.PI * bps;
-  const p = cur.slice();
-  p[0] += Math.sin(phase) * 0.06;
-  p[1] += Math.sin(phase * 2) * 0.08 + pulse * 0.1 * (beatCount % 2 ? 1 : -1) + Math.sin(phase * 9) * 0.035 * mouth;
-
+  ctx.restore();
+}
+// draw one dancer. sp: { p (radians), ry, rot, sx, hs, X (centre, px), sc (px per body unit), hueShift, col, dress, alpha, blur, bubble }
+function drawFigure(sp, t){
+  const p = sp.p, rot = sp.rot || 0, sx = sp.sx == null ? 1 : sp.sx, hs = sp.hs || 0, ry = sp.ry || 0, sc = sp.sc, X = sp.X, blur = sp.blur || 28;
   const pr = p[0], px = Math.cos(pr), py = Math.sin(pr);
   const hip = { x: 0, y: 0 };
   const neck = { x: Math.sin(pr) * 0.30, y: -Math.cos(pr) * 0.30 };
@@ -1005,33 +1281,40 @@ function drawDancer(t, dt){
   const knL = end(hL, p[6], 0.20), ftL = end(knL, p[7], 0.20);
   const knR = end(hR, p[8], 0.20), ftR = end(knR, p[9], 0.20);
   const hr = 0.085 * S.headSize, hd = pr + p[1];
-  const head = { x: neck.x + Math.sin(hd) * (hr + 0.025), y: neck.y - Math.cos(hd) * (hr + 0.025) };
+  const head = { x: neck.x + Math.sin(hd) * (hr + 0.025) + hs, y: neck.y - Math.cos(hd) * (hr + 0.025) };
+  const gy = H * (S.mode === 4 ? 0.91 : 0.95);
+  // rest on whichever part of the body is lowest once it has been turned: the feet, the head in a headstand, a side on the floor
+  const cr = Math.cos(rot), sr = Math.sin(rot), wy = q => sr * q.x + cr * q.y;
+  const low = Math.max(wy(ftL), wy(ftR), wy(knL), wy(knR), wy(haL), wy(haR), wy(elL), wy(elR), wy(neck), wy(shL), wy(shR), wy(head) + hr * 1.25);
+  const hipY = gy - low * sc + ry * sc - pulse * 0.035 * sc;
+  const sxe = Math.abs(sx) < 0.03 ? (sx < 0 ? -0.03 : 0.03) : sx;
+  const col = sp.col || `hsl(${(hue + 180 + (sp.hueShift || 0)) % 360},100%,62%)`;
+  ctx.save(); ctx.globalAlpha *= sp.alpha == null ? 1 : sp.alpha;
 
-  const sc = H * 0.6 * S.dSize, gy = H * (S.mode === 4 ? 0.91 : 0.95);
-  const x0 = (!startEl.hidden && W > 1000) ? W * 0.68 : W * (S.dPos === 'l' ? 0.17 : S.dPos === 'r' ? 0.83 : 0.5);
-  const hipY = gy - Math.max(ftL.y, ftR.y) * sc - pulse * 0.035 * sc;
-  const col = `hsl(${(hue + 180) % 360},100%,62%)`;
-
-  // floor glow
-  ctx.globalCompositeOperation = 'lighter';
-  ctx.fillStyle = `hsla(${(hue + 180) % 360},100%,55%,${0.14 + pulse * 0.22})`;
-  ctx.beginPath(); ctx.ellipse(x0, gy + 4, sc * 0.32, sc * 0.03, 0, 0, TAU); ctx.fill();
+  ctx.globalCompositeOperation = 'lighter';                                   // floor glow
+  ctx.fillStyle = `hsla(${(hue + 180 + (sp.hueShift || 0)) % 360},100%,55%,${0.14 + pulse * 0.22})`;
+  ctx.beginPath(); ctx.ellipse(X, gy + 4, sc * 0.32, sc * 0.03, 0, 0, TAU); ctx.fill();
   ctx.globalCompositeOperation = 'source-over';
 
-  ctx.save(); ctx.translate(x0, hipY); ctx.scale(sc, sc);
+  ctx.save(); ctx.translate(X, hipY); ctx.scale(sxe, 1); ctx.rotate(rot); ctx.scale(sc, sc);
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  const segs = [[hip, neck, 0.095], [shL, shR, 0.05], [hL, hR, 0.06],
-    [shL, elL, 0.05], [elL, haL, 0.042], [shR, elR, 0.05], [elR, haR, 0.042],
+  const arms = [[shL, elL, 0.05], [elL, haL, 0.042], [shR, elR, 0.05], [elR, haR, 0.042]];
+  const segs = [[hip, neck, 0.095], [shL, shR, 0.05], [hL, hR, 0.06], ...arms,
     [hL, knL, 0.062], [knL, ftL, 0.05], [hR, knR, 0.062], [knR, ftR, 0.05], [neck, head, 0.04]];
-  ctx.shadowColor = col; ctx.shadowBlur = 28; ctx.strokeStyle = col;
+  ctx.shadowColor = col; ctx.shadowBlur = blur; ctx.strokeStyle = col;
   for (const [a, b, w] of segs) seg(a, b, w + 0.022);
   ctx.shadowBlur = 0; ctx.strokeStyle = '#0a0614';
   for (const [a, b, w] of segs) seg(a, b, w);
+  if (sp.dress){
+    drawDress({ shL, shR, hL, hR, knL, knR, ftL, ftR }, t);
+    ctx.strokeStyle = col; for (const [a, b, w] of arms) seg(a, b, w + 0.016);      // arms stay in front of the dress
+    ctx.strokeStyle = '#0a0614'; for (const [a, b, w] of arms) seg(a, b, w);
+  }
 
   ctx.translate(head.x, head.y); ctx.rotate(hd);
   if (headImg && !S.circle){
     const h = hr * 2.5, k = h / headImg.height, w = headImg.width * k;
-    ctx.shadowColor = col; ctx.shadowBlur = 28;
+    ctx.shadowColor = col; ctx.shadowBlur = blur;
     if (headIsDefault && mouth > 0.02){
       const used = headWithMouth(headImg, mouth);
       ctx.drawImage(hc, 0, 0, headImg.width, used, -w / 2, -h / 2, w, used * k);
@@ -1040,7 +1323,7 @@ function drawDancer(t, dt){
     }
     ctx.shadowBlur = 0;
   } else {
-    ctx.shadowColor = col; ctx.shadowBlur = 28; ctx.fillStyle = col;
+    ctx.shadowColor = col; ctx.shadowBlur = blur; ctx.fillStyle = col;
     ctx.beginPath(); ctx.arc(0, 0, hr + 0.012, 0, TAU); ctx.fill(); ctx.shadowBlur = 0;
     ctx.save(); ctx.beginPath(); ctx.arc(0, 0, hr, 0, TAU); ctx.clip();
     if (headImg){
@@ -1062,7 +1345,70 @@ function drawDancer(t, dt){
     ctx.restore();
   }
   ctx.restore();
-  drawBubble(t, x0 + head.x * sc, hipY + head.y * sc, hr * sc * 1.2);
+  ctx.restore();
+  if (sp.bubble) drawBubble(t, X + sxe * (cr * head.x - sr * head.y) * sc, hipY + (sr * head.x + cr * head.y) * sc, hr * sc * 1.2);
+}
+function drawCrew(t, dt, sc0, x0){
+  grp.u += dt * clamp(bps, 1, 3.5);
+  const d = grp.def;
+  if (grp.u >= d.len){ endGroup(); drawDancer(t, dt); return; }
+  phase += dt * Math.PI * bps;
+  const g = d.f(grp.u, S.crewN), gs = Math.min(1, 0.92 * W / (g.span * sc0)), sc = sc0 * gs;
+  const spanPx = g.span * sc, xc = x0 + (clamp(x0, spanPx / 2 + W * 0.02, W - spanPx / 2 - W * 0.02) - x0) * (g.open == null ? 1 : g.open);
+  const figs = g.figs.slice().sort((a, b) => (a.z || 0) - (b.z || 0));
+  for (const f of figs){
+    let p = f.p;
+    if (f.lead) p = mixP(grp.from, p, mvEase(clamp(grp.u / 0.5)));          // the leader eases out of whatever he was doing
+    drawFigure({ p: p.map(v => v * D2R), ry: f.ry, rot: f.rot, sx: f.sx, hs: f.hs, X: xc + (f.dx || 0) * sc, sc, hueShift: f.hue, col: f.col, dress: f.dress, alpha: f.alpha, blur: f.lead ? 28 : 16, bubble: !!f.lead }, t);
+  }
+}
+
+function newPose(force){
+  if (grp && !force) return;                                  // let a crew routine finish
+  if (mv && mv.u < mv.def.len - 0.02 && !force) return;      // let a dance move finish
+  if (force && grp) endGroup();
+  mv = null;
+  const pick = S.move;
+  if (CREW[pick]){ startGroup(pick); return; }
+  if (pick === 'random' && crewDue && !force){ startGroup(bagPick('crew', CREW_ORDER)); return; }     // every few minutes, a crew
+  if (pick !== 'poses' && (pick !== 'random' || force || Math.random() < 0.4)){ startMove(pick === 'random' ? bagPick('mv', MOVE_ORDER) : pick); return; }
+  let i; do { i = 1 + ((Math.random() * (POSES.length - 1)) | 0); } while (i === lastPose);
+  lastPose = i;
+  let p = POSES[i].slice();
+  if (Math.random() < 0.5) p = [-p[0], -p[1], -p[4], -p[5], -p[2], -p[3], -p[8], -p[9], -p[6], -p[7]];
+  tgt = p.map(v => v * D2R);
+}
+const seg = (a, b, w) => { ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); };
+const end = (o, a, l) => ({ x: o.x + Math.sin(a) * l, y: o.y + Math.cos(a) * l });
+
+function drawDancer(t, dt){
+  const sc0 = H * 0.6 * S.dSize;
+  const x0 = (!startEl.hidden && W > 1000) ? W * 0.68 : W * (S.dPos === 'l' ? 0.17 : S.dPos === 'r' ? 0.83 : 0.5);
+  if (level < 0.03 && running){ tgt = POSES[0].map(v => v * D2R); mv = null; if (grp) endGroup(); }
+  if (grp){ drawCrew(t, dt, sc0, x0); return; }
+  if (!crewInit){ crewInit = true; resetCrewTimer(); }                                                          // the first wait is random too
+  if (S.move === 'random' && S.crewEvery > 0){ crewClock += dt; if (crewClock >= crewNext) crewDue = true; }       // time for a crew?
+  let r = null;
+  if (mv){
+    mv.u += dt * clamp(bps, 1, 3.5);
+    if (mv.u >= mv.def.len){ mv = null; tgt = STAND.map(v => v * D2R); }
+    else {
+      r = mv.def.f(mv.u); tgt = r.p.map(v => v * D2R);
+      if (r.snap) for (let i = 0; i < 10; i++){ cur[i] = tgt[i]; vel[i] = 0; }
+    }
+  }
+  const rx = r ? (r.rx || 0) : 0, ry = r ? (r.ry || 0) : 0, rot = r ? (r.rot || 0) : 0, sx = r && r.sx != null ? r.sx : 1, hs = r ? (r.hs || 0) : 0;
+  for (let i = 0; i < 10; i++){
+    const a = (tgt[i] - cur[i]) * 240 - vel[i] * 20;
+    vel[i] += a * dt; cur[i] += vel[i] * dt;
+  }
+  phase += dt * Math.PI * bps;
+  const p = cur.slice();
+  if (!(r && r.still)){
+    p[0] += Math.sin(phase) * 0.06;
+    p[1] += Math.sin(phase * 2) * 0.08 + pulse * 0.1 * (beatCount % 2 ? 1 : -1) + Math.sin(phase * 9) * 0.035 * mouth;
+  } else p[1] += Math.sin(phase * 9) * 0.035 * mouth;
+  drawFigure({ p, ry, rot, sx, hs, X: clamp(x0 + rx * sc0, W * 0.1, W * 0.9), sc: sc0, bubble: true }, t);
 }
 
 /* ---------- flying title ---------- */
@@ -1284,10 +1630,10 @@ function drawTitle(t){
 S.slides = { url: '', show: true };
 try { Object.assign(S.slides, JSON.parse(localStorage.getItem('soundlab-slides') || '{}')); } catch (_) {}
 const saveSlides = () => { try { localStorage.setItem('soundlab-slides', JSON.stringify(S.slides)); } catch (_) {} };
-S.dSize = 1; S.dPos = 'c'; S.talk = true; S.genie = 0.1;
-try { const d = JSON.parse(localStorage.getItem('soundlab-dancer') || 'null'); if (d){ if (d.size) S.dSize = +d.size; if (d.pos) S.dPos = d.pos; if (typeof d.talk === 'boolean') S.talk = d.talk; if (d.genie != null) S.genie = +d.genie; } } catch (_) {}
-const saveDancer = () => { try { localStorage.setItem('soundlab-dancer', JSON.stringify({ size: S.dSize, pos: S.dPos, talk: S.talk, genie: S.genie })); } catch (_) {} };
-function syncDancerUI(){ $('#dSize').value = S.dSize; $('#dPos').value = S.dPos; $('#talkOn').checked = S.talk; $('#genieAmt').value = String(S.genie); }
+S.dSize = 1; S.dPos = 'c'; S.talk = true; S.genie = 0.1; S.move = 'random'; S.crewN = 5; S.crewEvery = 180;
+try { const d = JSON.parse(localStorage.getItem('soundlab-dancer') || 'null'); if (d){ if (d.size) S.dSize = +d.size; if (d.pos) S.dPos = d.pos; if (typeof d.talk === 'boolean') S.talk = d.talk; if (d.genie != null) S.genie = +d.genie; if (d.move) S.move = d.move; if (d.crewN) S.crewN = +d.crewN; if (d.crewEvery != null) S.crewEvery = +d.crewEvery; } } catch (_) {}
+const saveDancer = () => { try { localStorage.setItem('soundlab-dancer', JSON.stringify({ size: S.dSize, pos: S.dPos, talk: S.talk, genie: S.genie, move: S.move, crewN: S.crewN, crewEvery: S.crewEvery })); } catch (_) {} };
+function syncDancerUI(){ $('#dSize').value = S.dSize; $('#dPos').value = S.dPos; $('#talkOn').checked = S.talk; $('#genieAmt').value = String(S.genie); $('#moveSel').value = S.move; $('#crewN').value = String(S.crewN); $('#crewEvery').value = String(S.crewEvery); }
 S.cal = { url: '', show: true, view: '', clean: true, dark: true, vis: 0.75 };
 try { Object.assign(S.cal, JSON.parse(localStorage.getItem('soundlab-cal') || '{}')); } catch (_) {}
 const saveCal = () => { try { localStorage.setItem('soundlab-cal', JSON.stringify(S.cal)); } catch (_) {} };
@@ -1627,16 +1973,24 @@ function drawBubble(t, hx, hy, hr){
   ctx.save();
   ctx.font = `800 ${fsz}px "Trebuchet MS","Segoe UI",sans-serif`;
   const lines = wrapLines(speech.text, maxW), bw = Math.max(...lines.map(l => ctx.measureText(l).width)) + 38, bh = lines.length * lh + 30;
-  if (speech.right === undefined) speech.right = hx < W / 2;           // pick a side once, so it doesn't flip as the dancer sways
-  const right = speech.right, tipX = hx + (right ? hr * 0.9 : -hr * 0.9), tipY = hy;
-  let bx = right ? hx + hr * 1.5 + 22 : hx - hr * 1.5 - 22 - bw;
-  bx = clamp(bx, 12, W - bw - 12) ;
-  const by = clamp(hy - bh * 0.62, 70, H - bh - 14);
   const pop = easeOutBack(clamp(e / 0.28)), fade = 1 - clamp((e - (total - 0.4)) / 0.4);
+  let bx, by, tipX, tipY, tail;
+  if (grp){                                                           // in a crew the bubble goes above the line, not on top of the neighbours
+    bx = clamp(hx - bw / 2, 12, W - bw - 12); by = clamp(hy - hr * 1.7 - bh - 14, 64, H - bh - 14);
+    tipX = hx; tipY = hy - hr * 1.15;
+    const baseX = clamp(hx, bx + 28, bx + bw - 28), baseY = by + bh;
+    tail = (dx, dy) => { ctx.beginPath(); ctx.moveTo(baseX - 13 + dx, baseY + dy); ctx.lineTo(baseX + 13 + dx, baseY + dy); ctx.lineTo(tipX + dx, tipY + dy); ctx.closePath(); };
+  } else {
+    if (speech.right === undefined) speech.right = hx < W / 2;           // pick a side once, so it doesn't flip as the dancer sways
+    const right = speech.right;
+    tipX = hx + (right ? hr * 0.9 : -hr * 0.9); tipY = hy;
+    bx = clamp(right ? hx + hr * 1.5 + 22 : hx - hr * 1.5 - 22 - bw, 12, W - bw - 12);
+    by = clamp(hy - bh * 0.62, 70, H - bh - 14);
+    const baseX = right ? bx : bx + bw, baseY = clamp(tipY, by + 22, by + bh - 22);
+    tail = (dx, dy) => { ctx.beginPath(); ctx.moveTo(baseX + dx, baseY - 13 + dy); ctx.lineTo(baseX + dx, baseY + 13 + dy); ctx.lineTo(tipX + dx, tipY + dy); ctx.closePath(); };
+  }
   ctx.globalAlpha = fade;
   ctx.translate(tipX, tipY); ctx.scale(0.55 + 0.45 * pop, 0.55 + 0.45 * pop); ctx.translate(-tipX, -tipY);
-  const baseX = right ? bx : bx + bw, baseY = clamp(tipY, by + 22, by + bh - 22);
-  const tail = (dx, dy) => { ctx.beginPath(); ctx.moveTo(baseX + dx, baseY - 13 + dy); ctx.lineTo(baseX + dx, baseY + 13 + dy); ctx.lineTo(tipX + dx, tipY + dy); ctx.closePath(); };
   rr(bx + 6, by + 6, bw, bh, 18); ctx.fillStyle = speech.kind === 'psa' ? '#ffe14a' : '#ff3d9a'; ctx.fill();          // offset shadow in the poster colours
   tail(6, 6); ctx.fill();
   ctx.lineJoin = 'round'; ctx.lineWidth = 8; ctx.strokeStyle = '#07040f';
@@ -2155,6 +2509,11 @@ $('#slideUrl').addEventListener('paste', () => setTimeout(() => { S.slides.url =
 $('#slideShow').onchange = e => { S.slides.show = e.target.checked; slideChange(); };
 $('#dSize').oninput = e => { S.dSize = +e.target.value; saveDancer(); };
 $('#dPos').onchange = e => { S.dPos = e.target.value; saveDancer(); };
+$('#moveSel').onchange = e => { S.move = e.target.value; saveDancer(); mv = null; newPose(true); };
+$('#nextMove').onclick = () => newPose(true);
+$('#crewN').onchange = e => { S.crewN = +e.target.value; saveDancer(); };
+$('#crewEvery').onchange = e => { S.crewEvery = +e.target.value; saveDancer(); resetCrewTimer(); };
+$('#crewNow').onclick = () => startGroup(bagPick('crew', CREW_ORDER));
 $('#talkOn').onchange = e => { S.talk = e.target.checked; if (!S.talk) speech = null; saveDancer(); };
 $('#genieAmt').onchange = e => { S.genie = +e.target.value; saveDancer(); };
 $('#sayNow').onclick = () => speak(lastSong);
@@ -2225,6 +2584,8 @@ addEventListener('keydown', e => {
   else if (k === 'm') laughNow(performance.now() / 1000);
   else if (k === 'c') celebrate(performance.now() / 1000);
   else if (k === 'v') speak(lastSong);
+  else if (k === 'n') newPose(true);
+  else if (k === 'g') startGroup(bagPick('crew', CREW_ORDER));
   else if (k === 'l') tmToggleShow();
   else if (k === 't') startTitle(performance.now() / 1000);
   wake();
